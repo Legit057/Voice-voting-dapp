@@ -1,0 +1,19 @@
+{
+  "name": "eth-voting-dapp",
+  "version": "1.0.0",
+  "description": "Multi-Poll Voting dApp on Ethereum Sepolia",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "dev": "python -m http.server 3000 --directory frontend",
+    "start": "python -m http.server 3000 --directory frontend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^18.0.10",
+    "hardhat": "^2.29.2"
+  }
+}
