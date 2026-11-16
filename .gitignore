@@ -1,0 +1,24 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+
+# Hardhat build artifacts & cache
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain/
+typechain-types/
+
+# Logs & temp files
+*.log
+.DS_Store
+Thumbs.db
+.vercel/
+.vscode/
