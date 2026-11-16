@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOICE | Decentralized Consensus & Meme Voting on Ethereum Sepolia</title>
+  <!-- SEO & OpenGraph Meta Tags (Change SITE_URL placeholder before custom domain launch) -->
+  <meta name="description" content="Decentralized multi-poll voting protocol on Ethereum Sepolia. Run cryptographic blind ballots and community consensus with zero double-voting." />
+  <meta property="og:title" content="VOICE | On-chain Voting DApp" />
+  <meta property="og:description" content="Decentralized multi-poll voting protocol on Ethereum Sepolia with cryptographic blind ballots and real-time consensus." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://example.invalid/index.html" />
+  <meta property="og:image" content="https://example.invalid/assets/memes/meme-01-raccoon-sleepy-coins.jpg" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <!-- Google Fonts: Bebas Neue, Plus Jakarta Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <!-- Modular CSS -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+  <link rel="stylesheet" href="css/scene3d.css" />
+
+  <!-- Ethers v6 UMD CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.17.0/ethers.umd.min.js"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.3/confetti.browser.min.js"></script>
+</head>
+<body data-scene="home">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <div id="site-header"></div>
+  <noscript>
+    <!-- Shared Pill Navbar (Static Fallback, Hydrated by layout.js) -->
+  <div class="nav-wrapper">
+    <header class="navbar" role="banner">
+      <div class="nav-container">
+        <!-- Brand Logo: Isometric Cube Mark -->
+        <a href="index.html" class="brand" aria-label="VOICE Home">
+          <div class="brand-cube-mark" aria-hidden="true">
+            <svg class="brand-cube-svg" viewBox="0 0 32 32" width="34" height="34" fill="none">
+              <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+          <span class="brand-title">VOICE</span>
+        </a>
+
+        <!-- Center Navigation Links -->
+        <nav class="nav-center-links" aria-label="Main Navigation">
+          <a href="index.html" class="nav-link active">Home</a>
+          <a href="polls.html" class="nav-link">Polls</a>
+          <a href="create.html" class="nav-link">Create</a>
+          <a href="dashboard.html" class="nav-link">Dashboard</a>
+          <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+          <a href="verify.html" class="nav-link">Verify</a>
+          <a href="how-it-works.html" class="nav-link">How It Works</a>
+        </nav>
+
+        <!-- Right Action Controls -->
+        <div class="nav-actions">
+          <div id="networkRibbon" class="network-ribbon" title="Connected to Ethereum Sepolia" role="status">
+            <span class="status-dot"></span>
+            <span id="networkRibbonText">SEPOLIA</span>
+          </div>
+
+          <button type="button" id="themeToggleBtn" class="btn-icon-toggle" aria-label="Toggle Theme">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+
+          <div class="wallet-dropdown-wrapper">
+            <button type="button" id="walletConnectBtn" class="btn-wallet-connect">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"></path>
+                <path d="M4 6v12c0 1.1.9 2 2 2h14v-4"></path>
+                <circle cx="18" cy="16" r="2"></circle>
+              </svg>
+              <span>Connect Wallet</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  </div>
+  </noscript>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-content">
+    <!-- Hero Section -->
+    <section class="hero-section" id="hero">
+      <!-- 3D CSS / SVG Floating Scene Container -->
+      <div id="hero3dScene" class="scene3d-container"></div>
+
+
+      <div class="container">
+        <div class="hero-content">
+          <div class="hero-pill-badge">
+            <span class="status-dot" style="color:var(--accent-lime);"></span>
+            <span>VOTEFI PROTOCOL &bull; LIVE ON ETHEREUM SEPOLIA</span>
+          </div>
+
+          <h1 class="hero-title">
+            MAKE YOUR <span class="hero-title-highlight">VOICE</span> IMMUTABLE
+          </h1>
+
+          <p class="hero-subtitle">
+            Create multi-option community polls, run cryptographic blind ballots, and settle consensus transparently with zero double-voting.
+          </p>
+
+          <div class="hero-cta-group">
+            <a href="polls.html" class="btn-primary">
+              <span>Explore All Polls</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </a>
+            <a href="create.html" class="btn-secondary">
+              <span>Create a Poll</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 3D Hero Fan of 3 Tilted Meme Cards (Minimal, Reliable Deck Architecture) -->
+        <div class="deck hero-fan-perspective" id="heroFanContainer" aria-label="Featured Poll Memes">
+          <!-- Card 1: Left -->
+          <div class="card-slot fan-left" data-slot="left" data-card-idx="0" tabindex="0" role="button" aria-pressed="false" aria-label="Meme ballot preview">
+            <div class="card-flip">
+              <div class="face-front">
+                <div class="card-front-top">
+                  <span class="card-category-badge" style="background:#6B6BFF; color:#0A0A0A;">MEME VOTING</span>
+                  <span class="card-flip-hint">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <polyline points="9 21 3 21 3 15"></polyline>
+                      <line x1="21" y1="3" x2="14" y2="10"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </svg>
+                    Tap to Flip
+                  </span>
+                </div>
+                <div class="card-media-box" style="background:#6B6BFF18;">
+                  <img src="assets/memes/meme-01-raccoon-sleepy-coins.jpg" alt="Meme" class="card-media" />
+                </div>
+                <div class="card-front-bottom">Which coin are you still holding?</div>
+              </div>
+              <div class="face-back">
+                <div>
+                  <div class="card-back-tag" style="background:var(--accent-orange); color:#0A0A0A; display:inline-block; padding:2px 8px; border-radius:var(--radius-full); font-size:0.68rem; font-weight:800;">SAMPLE POLL</div>
+                  <h4 class="card-back-question">Should Doge be the official gas currency of Ethereum Sepolia?</h4>
+                  <div class="card-back-meta">
+                    <div class="card-back-creator">
+                      <span>Created by <strong>0x1111...1111</strong></span>
+                    </div>
+                    <div class="card-back-time">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                      </svg>
+                      <span>3d 12h left</span>
+                      <span style="margin: 0 4px; opacity: 0.5;">&bull;</span>
+                      <span>142 votes cast</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-back-actions">
+                  <a href="polls.html" class="btn-primary" style="width:100%; justify-content:center;">Vote Now</a>
+                  <button type="button" class="btn-secondary flip-back-btn" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem;">Back to Artwork</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Center -->
+          <div class="card-slot fan-center" data-slot="center" data-card-idx="1" tabindex="0" role="button" aria-pressed="false" aria-label="Meme ballot preview">
+            <div class="card-flip">
+              <div class="face-front">
+                <div class="card-front-top">
+                  <span class="card-category-badge" style="background:#FF5A1F; color:#0A0A0A;">ON-CHAIN VOTING</span>
+                  <span class="card-flip-hint">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <polyline points="9 21 3 21 3 15"></polyline>
+                      <line x1="21" y1="3" x2="14" y2="10"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </svg>
+                    Tap to Flip
+                  </span>
+                </div>
+                <div class="card-media-box" style="background:#FF5A1F18;">
+                  <video src="assets/memes/meme-04-blue-birds-vote.mp4" poster="assets/memes/meme-04-blue-birds-vote-poster.jpg" autoplay loop muted playsinline class="card-media"></video>
+                </div>
+                <div class="card-front-bottom">Everyone gets one vote</div>
+              </div>
+              <div class="face-back">
+                <div>
+                  <div class="card-back-tag" style="background:var(--accent-orange); color:#0A0A0A; display:inline-block; padding:2px 8px; border-radius:var(--radius-full); font-size:0.68rem; font-weight:800;">SAMPLE POLL</div>
+                  <h4 class="card-back-question">Is Vitalik actually Satoshi Nakamoto in disguise?</h4>
+                  <div class="card-back-meta">
+                    <div class="card-back-creator">
+                      <span>Created by <strong>0x2222...2222</strong></span>
+                    </div>
+                    <div class="card-back-time">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                      </svg>
+                      <span>5d 8h left</span>
+                      <span style="margin: 0 4px; opacity: 0.5;">&bull;</span>
+                      <span>389 votes cast</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-back-actions">
+                  <a href="polls.html" class="btn-primary" style="width:100%; justify-content:center;">Vote Now</a>
+                  <button type="button" class="btn-secondary flip-back-btn" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem;">Back to Artwork</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Right -->
+          <div class="card-slot fan-right" data-slot="right" data-card-idx="2" tabindex="0" role="button" aria-pressed="false" aria-label="Meme ballot preview">
+            <div class="card-flip">
+              <div class="face-front">
+                <div class="card-front-top">
+                  <span class="card-category-badge" style="background:#FFB800; color:#0A0A0A;">HOT TAKES</span>
+                  <span class="card-flip-hint">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <polyline points="9 21 3 21 3 15"></polyline>
+                      <line x1="21" y1="3" x2="14" y2="10"></line>
+                      <line x1="3" y1="21" x2="10" y2="14"></line>
+                    </svg>
+                    Tap to Flip
+                  </span>
+                </div>
+                <div class="card-media-box" style="background:#FFB80018;">
+                  <img src="assets/memes/meme-02-frog-shocked.jpg" alt="Meme" class="card-media" />
+                </div>
+                <div class="card-front-bottom">Watching the results nervously?</div>
+              </div>
+              <div class="face-back">
+                <div>
+                  <div class="card-back-tag" style="background:var(--accent-orange); color:#0A0A0A; display:inline-block; padding:2px 8px; border-radius:var(--radius-full); font-size:0.68rem; font-weight:800;">SAMPLE POLL</div>
+                  <h4 class="card-back-question">Tabs or Spaces for smart contract Solidity development?</h4>
+                  <div class="card-back-meta">
+                    <div class="card-back-creator">
+                      <span>Created by <strong>0x3333...3333</strong></span>
+                    </div>
+                    <div class="card-back-time">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                      </svg>
+                      <span>1d 4h left</span>
+                      <span style="margin: 0 4px; opacity: 0.5;">&bull;</span>
+                      <span>512 votes cast</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-back-actions">
+                  <a href="polls.html" class="btn-primary" style="width:100%; justify-content:center;">Vote Now</a>
+                  <button type="button" class="btn-secondary flip-back-btn" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem;">Back to Artwork</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Banner Counter Row -->
+    <section class="stats-banner" aria-label="Protocol Statistics">
+      <div class="container">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-value skeleton-loader" id="statTotalPolls">--</span>
+            <span class="stat-label">Total On-Chain Polls</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value skeleton-loader" id="statTotalVotes" style="color:var(--accent-lime);">--</span>
+            <span class="stat-label">Votes Cast on Sepolia</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value skeleton-loader" id="statActivePolls" style="color:var(--accent-orange);">--</span>
+            <span class="stat-label">Active Open Ballots</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Infinite Two-Row Meme Marquee (Initial Fallbacks, Enhanced by js/index.js) -->
+    <section class="marquee-container" aria-label="Community Meme Gallery">
+      <div class="marquee-track marquee-left" id="marqueeRowLeft">
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-01-raccoon-sleepy-coins.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">Which coin are you still holding?</div>
+        </div>
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-02-frog-shocked.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">Watching the results nervously?</div>
+        </div>
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-03-hamster-to-the-moon.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">To the moon</div>
+        </div>
+      </div>
+      <div class="marquee-track marquee-right" id="marqueeRowRight">
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-03-hamster-to-the-moon.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">To the moon</div>
+        </div>
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-02-frog-shocked.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">Watching the results nervously?</div>
+        </div>
+        <div class="marquee-card">
+          <div class="marquee-media"><img src="assets/memes/meme-01-raccoon-sleepy-coins.jpg" alt="Meme" class="marquee-media-item" /></div>
+          <div class="marquee-caption">Which coin are you still holding?</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Trending Polls Section -->
+    <section class="trending-section" id="trending">
+      <div class="container">
+        <div class="trending-header-bar">
+          <div>
+            <span class="section-tag">POPULAR NOW</span>
+            <h2 class="section-title">TRENDING BALLOTS</h2>
+          </div>
+          <a href="polls.html" class="btn-secondary">
+            <span>View All</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </a>
+        </div>
+
+        <div class="polls-grid" id="trendingPollsGrid">
+          <!-- Initial Skeleton Loading Cards -->
+          <div class="trending-skeleton-card">
+            <div class="skeleton-line" style="width:40%; height:16px;"></div>
+            <div class="skeleton-line" style="width:85%; height:28px;"></div>
+            <div class="skeleton-line" style="width:100%; height:80px;"></div>
+          </div>
+          <div class="trending-skeleton-card">
+            <div class="skeleton-line" style="width:40%; height:16px;"></div>
+            <div class="skeleton-line" style="width:85%; height:28px;"></div>
+            <div class="skeleton-line" style="width:100%; height:80px;"></div>
+          </div>
+          <div class="trending-skeleton-card">
+            <div class="skeleton-line" style="width:40%; height:16px;"></div>
+            <div class="skeleton-line" style="width:85%; height:28px;"></div>
+            <div class="skeleton-line" style="width:100%; height:80px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works Teaser -->
+    <section class="teaser-section" id="how-it-works-teaser">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-tag">HOW IT WORKS</span>
+          <h2 class="section-title">THREE STEPS TO CONSENSUS</h2>
+          <p class="section-desc">Transparent voting architecture designed for web3 communities, DAOs, and meme showdowns.</p>
+        </div>
+
+        <div class="teaser-grid">
+          <div class="teaser-card">
+            <span class="teaser-num">01</span>
+            <h3 class="teaser-card-title">Launch On-Chain</h3>
+            <p class="teaser-card-desc">Define up to 20 options, set custom durations from 1 minute to 30 days, or enable blind voting to hide tallies until the poll closes.</p>
+          </div>
+          <div class="teaser-card">
+            <span class="teaser-num">02</span>
+            <h3 class="teaser-card-title">Connect & Vote</h3>
+            <p class="teaser-card-desc">Connect MetaMask and cast an immutable vote. Smart contract mappings enforce strictly 1 vote per address per poll.</p>
+          </div>
+          <div class="teaser-card">
+            <span class="teaser-num">03</span>
+            <h3 class="teaser-card-title">Verifiable Reveal</h3>
+            <p class="teaser-card-desc">Results tally directly from blockchain state. When a poll ends, winners and ties are resolved mathematically with zero centralized control.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Curated Home FAQ Section -->
+    <section class="home-faq-section" style="padding: 64px 0;">
+      <div class="container" style="max-width: 860px;">
+        <div class="section-head" style="text-align: center; margin-bottom: 40px;">
+          <span class="section-tag">FREQUENTLY ASKED QUESTIONS</span>
+          <h2 class="section-title">EVERYTHING YOU NEED TO KNOW</h2>
+          <p class="section-desc" style="max-width: 580px; margin: 0 auto;">
+            Clear, honest answers about smart contract immutability, blind voting mechanics, gas, and privacy on Ethereum Sepolia.
+          </p>
+        </div>
+
+        <div class="accordion-list">
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>How is "one vote per wallet" strictly enforced?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p>Each poll maintains an internal mapping <code>hasVoted[pollId][voterAddress]</code> directly in the <code>MultiPollVoting.sol</code> smart contract on Ethereum Sepolia. Once your vote transaction is mined, that slot flips to <code>true</code>. Any further vote call from the same address on that pollId automatically reverts at the EVM bytecode level.</p>
+            </div>
+          </div>
+
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>What are blind voting ballots?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p>When a poll creator enables Blind Voting, vote tallies and option percentages are hidden from frontend views while the ballot is active. This eliminates herd mentality and social proof bias. Once the scheduled duration ends or the creator concludes the poll, the full tallies are revealed transparently.</p>
+            </div>
+          </div>
+
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>Do I have to pay real money to vote or create polls?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p>No. VOICE is deployed on Ethereum Sepolia (Chain ID 11155111), an official Ethereum testnet. Gas fees are paid in free Sepolia test ETH, which you can claim instantly from free public faucets such as Google Cloud Web3 Faucet or Sepolia PoW Faucet.</p>
+            </div>
+          </div>
+
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>What is the difference between archiving (soft delete) and cancelling?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p><strong>Cancelling</strong> (<code>cancelPoll</code>) halts an active poll immediately before its scheduled end time; it can only be performed by the creator. <strong>Archiving</strong> (<code>archivePoll</code>) hides ended or cancelled polls from discovery lists. Archiving does not delete blockchain history: all votes and receipts remain permanently verifiable on Etherscan.</p>
+            </div>
+          </div>
+
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>Can anyone alter or delete my vote once cast?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p>No. The contract is non-custodial and contains no admin overrides or backdoors. Every vote is signed by your own wallet and recorded immutably in Ethereum block history. Neither the creator nor protocol developers can modify or remove your cast vote.</p>
+            </div>
+          </div>
+
+          <div class="faq-accordion-item">
+            <button type="button" class="faq-question-btn" aria-expanded="false">
+              <span>How can I mathematically verify my vote was counted?</span>
+              <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="faq-answer-panel">
+              <p>Every vote transaction emits a <code>VoteCast(pollId, voter, optionIndex)</code> event logged in the block receipt. You can inspect your transaction hash on Sepolia Etherscan or paste it into our dedicated <a href="verify.html" style="color:var(--accent-lime); text-decoration:underline;">Vote Verifier</a> to decode the parameters with cryptographic proof.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 32px;">
+          <a href="how-it-works.html#faq" class="btn-secondary">
+            <span>View Full Knowledgebase & Rules</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA Banner -->
+    <section class="cta-banner-section">
+      <div class="container">
+        <div class="cta-banner-card">
+          <div class="cta-banner-content">
+            <h2 class="cta-banner-title">READY TO LAUNCH YOUR OWN POLL?</h2>
+            <p class="cta-banner-desc">Set up a decentralized question in 60 seconds with live instant previews and custom options.</p>
+            <a href="create.html" class="btn-primary">
+              <span>Create a Poll Now</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </a>
+          </div>
+          <div class="cta-banner-art">
+            <div class="cta-3d-cube-wrapper">
+              <div class="brand-cube-mark cta-cube-mark" aria-hidden="true">
+                <svg class="brand-cube-svg" viewBox="0 0 32 32" width="130" height="130" fill="none">
+                  <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                  <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                  <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                  <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+              <div class="cta-mini-meme-preview">
+                <img src="assets/memes/meme-01-raccoon-sleepy-coins.jpg" alt="Meme preview" class="cta-mini-card" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Shared Footer (Static Fallback, Hydrated by layout.js) -->
+  <footer class="footer-wrapper" role="contentinfo">
+    <div class="container">
+      <div class="network-status-panel">
+        <div class="net-item">
+          <span class="status-dot" id="footerStatusDot" style="color:#00D26A;"></span>
+          <span class="net-label">Network:</span>
+          <span class="net-val">Ethereum Sepolia (11155111)</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Block:</span>
+          <span class="net-val" id="footerBlockNumber">Fetching...</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Gas:</span>
+          <span class="net-val" id="footerGasPrice" style="color:var(--accent-orange);">~0.1 Gwei</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Contract:</span>
+          <span class="net-val-code">
+            <span id="footerContractAddr">0x6525...90A0</span>
+            <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </span>
+          <span class="verified-badge" title="Source code verified on Sepolia Etherscan">VERIFIED</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Status:</span>
+          <span class="net-val" id="footerReachableStatus" style="color:#00D26A;">Reachable</span>
+        </div>
+        <div class="net-item">
+          <a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
+            <span>Etherscan</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-grid">
+        <div class="footer-brand-col">
+          <a href="index.html" class="brand" aria-label="VOICE Home">
+            <div class="brand-cube-mark" aria-hidden="true">
+              <svg class="brand-cube-svg" viewBox="0 0 32 32" width="36" height="36" fill="none">
+                <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+            </div>
+            <span class="brand-title">VOICE</span>
+          </a>
+          <p class="footer-desc">
+            Decentralized consensus protocol on Ethereum Sepolia. Run transparent multi-option polls, blind ballots, and community votes with zero double voting.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Protocol Pages</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="polls.html">Browse Polls</a></li>
+            <li><a href="create.html">Create a Poll</a></li>
+            <li><a href="dashboard.html">My Activity</a></li>
+            <li><a href="leaderboard.html">Leaderboard & XP</a></li>
+            <li><a href="verify.html">Verify a Vote</a></li>
+            <li><a href="how-it-works.html">How It Works</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Developers & Trust</h4>
+          <ul class="footer-links">
+            <li><a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer">Smart Contract Code</a></li>
+            <li><a href="verify.html">Cryptographic Vote Verifier</a></li>
+            <li><a href="how-it-works.html#faq">FAQ & Rules</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>&copy; 2026 VOICE. Built for decentralized consensus on Ethereum Sepolia.</div>
+        <div class="meme-disclaimer">Meme art belongs to its original creators; used for demo purposes</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Page Logic Module -->
+  <script type="module" src="js/index.js"></script>
+</body>
+</html>

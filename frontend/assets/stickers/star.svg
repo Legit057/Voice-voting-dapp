@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- 8-Point Geometric Sparkle Starburst -->
+  <path d="M50 4 L59 36 L91 27 L69 50 L91 73 L59 64 L50 96 L41 64 L9 73 L31 50 L9 27 L41 36 Z" 
+        fill="#C6FF4D" stroke="#0A0A0A" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="50" cy="50" r="10" fill="#FF5A1F" stroke="#0A0A0A" stroke-width="4"/>
+</svg>

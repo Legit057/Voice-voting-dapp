@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOICE | Ballot Details</title>
+  <!-- SEO & OpenGraph Meta Tags (Change SITE_URL placeholder before custom domain launch) -->
+  <meta name="description" content="Vote on this decentralized on-chain ballot on Ethereum Sepolia. One wallet, one vote with verifiable execution." />
+  <meta property="og:title" content="VOICE | View Ballot & Vote" />
+  <meta property="og:description" content="Cast your vote on-chain with cryptographic integrity on Ethereum Sepolia." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://example.invalid/poll.html" />
+  <meta property="og:image" content="https://example.invalid/assets/memes/meme-01-raccoon-sleepy-coins.jpg" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <!-- Google Fonts: Bebas Neue, Plus Jakarta Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <!-- Modular CSS -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+
+  <!-- Ethers v6 UMD CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.17.0/ethers.umd.min.js"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
+  <!-- QRCode.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.3/confetti.browser.min.js"></script>
+  <!-- html2canvas CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body data-scene="poll">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <div id="site-header"></div>
+  <noscript>
+    <!-- Shared Pill Navbar (Static Fallback, Hydrated by layout.js) -->
+  <div class="nav-wrapper">
+    <header class="navbar" role="banner">
+      <div class="nav-container">
+        <a href="index.html" class="brand" aria-label="VOICE Home">
+          <div class="brand-cube-mark" aria-hidden="true">
+            <svg class="brand-cube-svg" viewBox="0 0 32 32" width="34" height="34" fill="none">
+              <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+          <span class="brand-title">VOICE</span>
+        </a>
+
+        <nav class="nav-center-links" aria-label="Main Navigation">
+          <a href="index.html" class="nav-link">Home</a>
+          <a href="polls.html" class="nav-link active">Polls</a>
+          <a href="create.html" class="nav-link">Create</a>
+          <a href="dashboard.html" class="nav-link">Dashboard</a>
+          <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+          <a href="verify.html" class="nav-link">Verify</a>
+          <a href="how-it-works.html" class="nav-link">How It Works</a>
+        </nav>
+
+        <div class="nav-actions">
+          <div id="networkRibbon" class="network-ribbon" title="Connected to Ethereum Sepolia" role="status">
+            <span class="status-dot"></span>
+            <span id="networkRibbonText">SEPOLIA</span>
+          </div>
+
+          <button type="button" id="themeToggleBtn" class="btn-icon-toggle" aria-label="Toggle Theme">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+
+          <div class="wallet-dropdown-wrapper">
+            <button type="button" id="walletConnectBtn" class="btn-wallet-connect">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"></path>
+                <path d="M4 6v12c0 1.1.9 2 2 2h14v-4"></path>
+                <circle cx="18" cy="16" r="2"></circle>
+              </svg>
+              <span>Connect Wallet</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  </div>
+  </noscript>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-content">
+    <div class="container poll-detail-page">
+      <!-- Back Navigation -->
+      <div class="poll-detail-nav">
+        <a href="polls.html" class="btn-back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Back to All Polls</span>
+        </a>
+      </div>
+
+      <!-- Single Poll Detail Container (Rendered by js/poll.js) -->
+      <section id="pollDetailContainer">
+        <!-- Loading Skeleton -->
+        <div class="skeleton-card" style="min-height: 480px;">
+          <div class="skeleton-line" style="width: 30%; height: 32px;"></div>
+          <div class="skeleton-line" style="width: 70%; height: 28px; margin-top: 16px;"></div>
+          <div class="skeleton-line" style="width: 100%; height: 20px;"></div>
+          <div class="skeleton-line" style="width: 100%; height: 60px; margin-top: 24px;"></div>
+          <div class="skeleton-line" style="width: 100%; height: 60px;"></div>
+          <div class="skeleton-line" style="width: 100%; height: 60px;"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Shared Footer (Static Fallback, Hydrated by layout.js) -->
+  <footer class="footer-wrapper" role="contentinfo">
+    <div class="container">
+      <div class="network-status-panel">
+        <div class="net-item">
+          <span class="status-dot" id="footerStatusDot" style="color:#00D26A;"></span>
+          <span class="net-label">Network:</span>
+          <span class="net-val">Ethereum Sepolia (11155111)</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Block:</span>
+          <span class="net-val" id="footerBlockNumber">Fetching...</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Gas:</span>
+          <span class="net-val" id="footerGasPrice" style="color:var(--accent-orange);">~0.1 Gwei</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Contract:</span>
+          <span class="net-val-code">
+            <span id="footerContractAddr">0x6525...90A0</span>
+            <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </span>
+          <span class="verified-badge" title="Source code verified on Sepolia Etherscan">VERIFIED</span>
+        </div>
+        <div class="net-item">
+          <span class="net-label">Status:</span>
+          <span class="net-val" id="footerReachableStatus" style="color:#00D26A;">Reachable</span>
+        </div>
+        <div class="net-item">
+          <a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
+            <span>Etherscan</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-grid">
+        <div class="footer-brand-col">
+          <a href="index.html" class="brand" aria-label="VOICE Home">
+            <div class="brand-cube-mark" aria-hidden="true">
+              <svg class="brand-cube-svg" viewBox="0 0 32 32" width="36" height="36" fill="none">
+                <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+            </div>
+            <span class="brand-title">VOICE</span>
+          </a>
+          <p class="footer-desc">
+            Decentralized consensus protocol on Ethereum Sepolia. Run transparent multi-option polls, blind ballots, and community votes with zero double voting.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Protocol Pages</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="polls.html">Browse Polls</a></li>
+            <li><a href="create.html">Create a Poll</a></li>
+            <li><a href="dashboard.html">My Activity</a></li>
+            <li><a href="leaderboard.html">Leaderboard & XP</a></li>
+            <li><a href="verify.html">Verify a Vote</a></li>
+            <li><a href="how-it-works.html">How It Works</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Developers & Trust</h4>
+          <ul class="footer-links">
+            <li><a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer">Smart Contract Code</a></li>
+            <li><a href="verify.html">Cryptographic Vote Verifier</a></li>
+            <li><a href="how-it-works.html#faq">FAQ & Rules</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>&copy; 2026 VOICE. Built for decentralized consensus on Ethereum Sepolia.</div>
+        <div class="meme-disclaimer">Meme art belongs to its original creators; used for demo purposes</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Page Logic Module -->
+  <script type="module" src="js/poll.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+[
+  {
+    "src": "assets/memes/meme-01-raccoon-sleepy-coins.jpg",
+    "type": "image",
+    "caption": "Which coin are you still holding?",
+    "alt": "Sleepy raccoon sitting on a stack of gold coins",
+    "tag": "MEME VOTING",
+    "color": "#6B6BFF",
+    "fit": "contain",
+    "position": "center"
+  },
+  {
+    "src": "assets/memes/meme-02-frog-shocked.jpg",
+    "type": "image",
+    "caption": "Watching the results nervously?",
+    "alt": "Shocked green frog in a blue shirt",
+    "tag": "MEME VOTING",
+    "color": "#FFB800",
+    "fit": "contain",
+    "position": "center"
+  },
+  {
+    "src": "assets/memes/meme-03-hamster-to-the-moon.jpg",
+    "type": "image",
+    "caption": "To the moon",
+    "alt": "Orange and white hamster with the text TO THE MOON",
+    "tag": "HOT TAKES",
+    "color": "#0B2A14",
+    "fit": "contain",
+    "position": "center"
+  },
+  {
+    "src": "assets/memes/meme-04-blue-birds-vote.mp4",
+    "webm": "assets/memes/meme-04-blue-birds-vote.webm",
+    "poster": "assets/memes/meme-04-blue-birds-vote-poster.jpg",
+    "type": "video",
+    "caption": "Everyone gets one vote",
+    "alt": "Three blue bird characters standing around a voting machine",
+    "tag": "ON-CHAIN VOTING",
+    "color": "#0A0A0A",
+    "fit": "contain",
+    "position": "center"
+  },
+  {
+    "src": "assets/memes/meme-05-blue-bird-trading.mp4",
+    "webm": "assets/memes/meme-05-blue-bird-trading.webm",
+    "poster": "assets/memes/meme-05-blue-bird-trading-poster.jpg",
+    "type": "video",
+    "caption": "Results are in",
+    "alt": "Blue bird character cheering in front of a chart",
+    "tag": "DEBATES VOTING",
+    "color": "#0A0A0A",
+    "fit": "contain",
+    "position": "center"
+  }
+]

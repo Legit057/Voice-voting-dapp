@@ -1,0 +1,719 @@
+/* ==========================================================================
+   MULTIPOLL &bull; css/animations.css
+   3D Tilts, Card Flips, Infinite Marquees, Floating Stickers, Reduced Motion
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. View Transitions API (Chrome / Edge / Safari 18+)
+   -------------------------------------------------------------------------- */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 0.2s cubic-bezier(0.16, 1, 0.3, 1) both fadeOut;
+}
+
+::view-transition-new(root) {
+  animation: 0.25s cubic-bezier(0.16, 1, 0.3, 1) both fadeIn;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --------------------------------------------------------------------------
+   2. Keyframe Animations
+   -------------------------------------------------------------------------- */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(40px) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* Winner & Tie Stamp Scale Effect */
+@keyframes badgeStamp {
+  0% {
+    transform: scale(2.4) rotate(-15deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.95) rotate(-3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+}
+
+.badge-winner-stamp {
+  animation: badgeStamp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* --------------------------------------------------------------------------
+   Logo Cube 3D Animation & Load Half-Turn
+   -------------------------------------------------------------------------- */
+.brand-cube-mark {
+  display: inline-block;
+  transform-style: preserve-3d;
+  transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: cubeLoadHalfTurn 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform;
+}
+
+.brand-cube-mark:hover {
+  transform: rotateY(360deg);
+}
+
+@keyframes cubeLoadHalfTurn {
+  0% { transform: rotateY(-180deg) scale(0.9); opacity: 0; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   3. Hero 3D Card Deck (Minimal, Reliable, Pure CSS Fan & Flip)
+   .deck / .hero-fan-perspective
+     > .card-slot / .card-wrap (static fan position via custom props)
+       > .card-flip (the ONLY element that rotates)
+         > .face-front, .face-back (absolute, solid background, backface-visibility: hidden)
+   -------------------------------------------------------------------------- */
+.deck,
+.hero-fan-perspective {
+  perspective: 1200px;
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  height: 480px;
+  margin: 24px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-slot,
+.card-wrap {
+  position: absolute;
+  width: 300px;
+  height: 420px;
+  transform: translate3d(var(--slot-x, 0), var(--slot-y, 0), 0) rotate(var(--slot-rot, 0deg)) scale(var(--slot-scale, 1));
+  z-index: var(--slot-z, 1);
+  transition: transform 0.35s ease, z-index 0.35s ease;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.card-slot:hover,
+.card-wrap:hover {
+  transform: translate3d(var(--slot-x, 0), calc(var(--slot-y, 0) - 10px), 0) rotate(var(--slot-rot, 0deg)) scale(var(--slot-scale, 1));
+  z-index: 5 !important;
+}
+
+.card-slot.is-flipped,
+.card-wrap.is-flipped {
+  z-index: 5 !important;
+}
+
+/* Fan Slot Positions */
+.card-slot[data-slot="left"],
+.card-slot.fan-left,
+.card-wrap.fan-left {
+  --slot-x: -240px;
+  --slot-y: 12px;
+  --slot-rot: -8deg;
+  --slot-scale: 0.94;
+  --slot-z: 1;
+}
+
+.card-slot[data-slot="center"],
+.card-slot.fan-center,
+.card-wrap.fan-center {
+  --slot-x: 0px;
+  --slot-y: 0px;
+  --slot-rot: 0deg;
+  --slot-scale: 1;
+  --slot-z: 3;
+}
+
+.card-slot[data-slot="right"],
+.card-slot.fan-right,
+.card-wrap.fan-right {
+  --slot-x: 240px;
+  --slot-y: 12px;
+  --slot-rot: 8deg;
+  --slot-scale: 0.94;
+  --slot-z: 2;
+}
+
+/* Card Flip - The ONLY element that rotates */
+.card-flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.card-slot.is-flipped .card-flip,
+.card-wrap.is-flipped .card-flip {
+  transform: rotateY(180deg);
+}
+
+/* Faces: Solid opaque background, backface-visibility: hidden */
+/* NO backdrop-filter, NO filter, NO mix-blend-mode, NO clip-path, NO opacity < 1, NO overflow:hidden */
+.face-front,
+.face-back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-xl);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.face-front {
+  background: var(--surface);
+  padding: 16px;
+  z-index: 2;
+}
+
+[data-theme="light"] .face-front {
+  background: #FFFFFF;
+}
+
+.face-back {
+  background: var(--surface);
+  transform: rotateY(180deg);
+  padding: 24px;
+  justify-content: space-between;
+  z-index: 1;
+}
+
+[data-theme="light"] .face-back {
+  background: #FFFFFF;
+}
+
+.card-front-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.card-flip-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.card-category-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+/* Media box inside front face: ONLY place with overflow:hidden */
+.card-media-box {
+  width: 100%;
+  flex: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.card-front-bottom {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.35;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.card-back-question {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.25;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 12px 0 16px;
+}
+
+.card-back-creator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.card-back-creator-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.card-back-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.card-back-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .deck,
+  .hero-fan-perspective {
+    height: 440px;
+  }
+  .card-slot,
+  .card-wrap {
+    width: 270px;
+    height: 380px;
+  }
+  .card-slot[data-slot="left"],
+  .card-slot.fan-left,
+  .card-wrap.fan-left {
+    --slot-x: -140px;
+    --slot-scale: 0.9;
+  }
+  .card-slot[data-slot="right"],
+  .card-slot.fan-right,
+  .card-wrap.fan-right {
+    --slot-x: 140px;
+    --slot-scale: 0.9;
+  }
+}
+
+@media (max-width: 640px) {
+  .deck,
+  .hero-fan-perspective {
+    height: 400px;
+  }
+  .card-slot,
+  .card-wrap {
+    width: 250px;
+    height: 350px;
+  }
+  .card-slot[data-slot="left"],
+  .card-slot.fan-left,
+  .card-wrap.fan-left {
+    --slot-x: -40px;
+    --slot-scale: 0.85;
+  }
+  .card-slot[data-slot="right"],
+  .card-slot.fan-right,
+  .card-wrap.fan-right {
+    --slot-x: 40px;
+    --slot-scale: 0.85;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Results Reveal Ceremony Overlay
+   -------------------------------------------------------------------------- */
+.ceremony-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.ceremony-box {
+  background: var(--surface);
+  border: 2px solid var(--accent-orange);
+  border-radius: var(--radius-2xl);
+  padding: 40px 32px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(255, 90, 31, 0.3);
+  position: relative;
+  animation: modalScaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.2) forwards;
+}
+
+.ceremony-countdown-num {
+  font-family: var(--font-display);
+  font-size: 6rem;
+  line-height: 1;
+  color: var(--accent-orange);
+  animation: badgeStamp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.ceremony-winner-stamp {
+  display: inline-block;
+  padding: 10px 24px;
+  background: var(--accent-lime);
+  color: #0A0A0A;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-brutal-lime);
+  transform: rotate(-3deg);
+  animation: badgeStamp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  margin-top: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Leaderboard Table & Level Chips
+   -------------------------------------------------------------------------- */
+.leaderboard-table tr {
+  transition: background 0.15s ease;
+}
+
+.leaderboard-table tr:hover {
+  background: var(--surface-card);
+}
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.rank-gold {
+  background: #FFD700;
+  color: #0A0A0A;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.rank-silver {
+  background: #C0C0C0;
+  color: #0A0A0A;
+  box-shadow: 0 0 8px rgba(192, 192, 192, 0.4);
+}
+
+.rank-bronze {
+  background: #CD7F32;
+  color: #FFFFFF;
+  box-shadow: 0 0 8px rgba(205, 127, 50, 0.4);
+}
+
+.rank-default {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.wallet-lvl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: var(--accent-lime);
+  color: #0A0A0A;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.68rem;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.04em;
+}
+
+.streak-flame-icon {
+  display: inline-flex;
+  color: var(--accent-orange);
+  margin-left: 4px;
+}
+
+.back-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Idle Float Animations */
+@keyframes heroFloatA {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes heroFloatB {
+  0%, 100% { transform: translateY(-10px); }
+  50% { transform: translateY(8px); }
+}
+
+@keyframes heroFloatC {
+  0%, 100% { transform: translateY(6px); }
+  50% { transform: translateY(-12px); }
+}
+
+.hero-card-left .card-flipper {
+  animation: heroFloatA 6s ease-in-out infinite;
+}
+
+.hero-card-center .card-flipper {
+  animation: heroFloatB 7s ease-in-out infinite 0.5s;
+}
+
+.hero-card-right .card-flipper {
+  animation: heroFloatC 6.5s ease-in-out infinite 1s;
+}
+
+/* --------------------------------------------------------------------------
+   4. Infinite Two-Row Meme Marquee
+   -------------------------------------------------------------------------- */
+.marquee-container {
+  width: 100%;
+  overflow: hidden;
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.marquee-container::before,
+.marquee-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 120px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.marquee-container::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--bg) 0%, transparent 100%);
+}
+
+.marquee-container::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--bg) 0%, transparent 100%);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 16px;
+  will-change: transform;
+}
+
+.marquee-left {
+  animation: marqueeLeft 35s linear infinite;
+}
+
+.marquee-right {
+  animation: marqueeRight 35s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes marqueeLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marqueeRight {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.marquee-card {
+  width: 220px;
+  height: 150px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.marquee-card:hover {
+  transform: scale(1.04);
+  border-color: var(--accent-orange);
+}
+
+.marquee-media {
+  width: 100%;
+  height: 110px;
+  overflow: hidden;
+  background: #000;
+}
+
+.marquee-media img, .marquee-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marquee-caption {
+  height: 40px;
+  padding: 4px 10px;
+  background: var(--surface);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+   5. Floating Stickers (Smiley, Star, Squiggle) - Slow Continuous 3D Float
+   -------------------------------------------------------------------------- */
+.floating-sticker {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+  transition: transform 0.2s ease-out;
+}
+
+.sticker-drift-1 {
+  animation: stickerDriftA 14s ease-in-out infinite;
+}
+
+.sticker-drift-2 {
+  animation: stickerDriftB 17s ease-in-out infinite;
+}
+
+.sticker-drift-3 {
+  animation: stickerDriftC 15s ease-in-out infinite;
+}
+
+@keyframes stickerDriftA {
+  0% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.95; }
+  25% { transform: translateY(-16px) rotate(6deg) rotateX(8deg) rotateY(12deg); opacity: 1; }
+  50% { transform: translateY(-24px) rotate(12deg) rotateX(14deg) rotateY(16deg); opacity: 0.92; }
+  75% { transform: translateY(-10px) rotate(4deg) rotateX(6deg) rotateY(8deg); opacity: 0.98; }
+  100% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.95; }
+}
+
+@keyframes stickerDriftB {
+  0% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.92; }
+  30% { transform: translateY(18px) rotate(-8deg) rotateX(-12deg) rotateY(-14deg); opacity: 1; }
+  60% { transform: translateY(26px) rotate(-14deg) rotateX(-16deg) rotateY(-18deg); opacity: 0.95; }
+  85% { transform: translateY(10px) rotate(-4deg) rotateX(-6deg) rotateY(-8deg); opacity: 0.9; }
+  100% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.92; }
+}
+
+@keyframes stickerDriftC {
+  0% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.95; }
+  35% { transform: translateY(-14px) rotate(7deg) rotateX(10deg) rotateY(-10deg); opacity: 1; }
+  70% { transform: translateY(-22px) rotate(10deg) rotateX(14deg) rotateY(-16deg); opacity: 0.92; }
+  100% { transform: translateY(0px) rotate(0deg) rotateX(0deg) rotateY(0deg); opacity: 0.95; }
+}
+
+/* --------------------------------------------------------------------------
+   6. Accessibility & Reduced Motion
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .hero-card-left, .hero-card-center, .hero-card-right {
+    transform: none !important;
+    position: static !important;
+  }
+
+  .hero-fan-perspective {
+    height: auto !important;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .hero-fan-card {
+    position: relative !important;
+    transform: none !important;
+  }
+
+  .marquee-track {
+    animation: none !important;
+    overflow-x: auto;
+  }
+
+  .floating-sticker {
+    display: none !important;
+  }
+
+  ::view-transition-old(root), ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+
+/* Touch devices: disable heavy tilt */
+@media (hover: none) {
+  .hero-fan-card:hover {
+    transform: none !important;
+  }
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Isometric Block Cube Mark for VOICE -->
+  <!-- Top Face (Lime #C6FF4D) -->
+  <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="#0A0A0A" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Left Face (Orange #FF5A1F) -->
+  <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="#0A0A0A" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Right Face (Darker Orange #D9430F) -->
+  <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="#0A0A0A" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- White Check Mark on Left Face -->
+  <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

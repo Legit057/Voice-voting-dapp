@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Geometric Speech Bubble -->
+  <path d="M12 20 C12 12 18 6 28 6 L72 6 C82 6 88 12 88 20 L88 60 C88 68 82 74 72 74 L42 74 L20 92 L24 74 L20 74 C14 74 12 68 12 60 Z" 
+        fill="#FF5A1F" stroke="#0A0A0A" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="36" cy="40" r="5" fill="#0A0A0A"/>
+  <circle cx="50" cy="40" r="5" fill="#0A0A0A"/>
+  <circle cx="64" cy="40" r="5" fill="#0A0A0A"/>
+</svg>

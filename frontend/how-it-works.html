@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOICE | How It Works & FAQ</title>
+  <!-- SEO & OpenGraph Meta Tags (Change SITE_URL placeholder before custom domain launch) -->
+  <meta name="description" content="Learn how VOICE implements multi-option polling, blind ballots, and on-chain consensus on Ethereum Sepolia." />
+  <meta property="og:title" content="VOICE | How It Works & FAQ" />
+  <meta property="og:description" content="Architecture, smart contract execution rules, and frequently asked questions for VOICE." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://example.invalid/how-it-works.html" />
+  <meta property="og:image" content="https://example.invalid/assets/memes/meme-01-raccoon-sleepy-coins.jpg" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <!-- Google Fonts: Bebas Neue, Plus Jakarta Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <!-- Modular CSS -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+
+  <!-- Ethers v6 UMD CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.17.0/ethers.umd.min.js"></script>
+</head>
+<body data-scene="how">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <div id="site-header"></div>
+  <noscript>
+    <!-- Shared Pill Navbar (Static Fallback, Hydrated by layout.js) -->
+  <div class="nav-wrapper">
+    <header class="navbar" role="banner">
+      <div class="nav-container">
+        <a href="index.html" class="brand" aria-label="VOICE Home">
+          <div class="brand-cube-mark" aria-hidden="true">
+            <svg class="brand-cube-svg" viewBox="0 0 32 32" width="34" height="34" fill="none">
+              <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+              <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+          <span class="brand-title">VOICE</span>
+        </a>
+
+        <nav class="nav-center-links" aria-label="Main Navigation">
+          <a href="index.html" class="nav-link">Home</a>
+          <a href="polls.html" class="nav-link">Polls</a>
+          <a href="create.html" class="nav-link">Create</a>
+          <a href="dashboard.html" class="nav-link">Dashboard</a>
+          <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+          <a href="verify.html" class="nav-link">Verify</a>
+          <a href="how-it-works.html" class="nav-link active">How It Works</a>
+        </nav>
+
+        <div class="nav-actions">
+          <button type="button" class="btn-theme-toggle" id="themeToggleBtn" aria-label="Toggle dark/light theme" title="Toggle theme">
+            <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+
+          <div class="wallet-control-area">
+            <button type="button" class="btn-connect" id="navConnectBtn">
+              <span>Connect Wallet</span>
+            </button>
+          </div>
+
+          <button type="button" class="btn-hamburger" id="navHamburgerBtn" aria-label="Open navigation menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+  </div>
+  </noscript>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-content">
+    <div class="container how-it-works-page">
+      <!-- Page Header -->
+      <header class="section-head">
+        <span class="section-tag">ARCHITECTURE & PROTOCOL</span>
+        <h1 class="section-title">HOW VOICE WORKS</h1>
+        <p class="section-desc">
+          VOICE combines gas-efficient Ethereum smart contracts with cryptographic blind ballots and decentralized storage for community consensus.
+        </p>
+      </header>
+
+      <!-- 3 Steps Grid -->
+      <section class="steps-timeline-grid" aria-label="3 Steps">
+        <div class="step-card">
+          <div class="step-badge-num">1</div>
+          <h3 class="step-title">Decentralized Ballot Launch</h3>
+          <p class="step-desc">
+            Any user can call <code>createPoll(...)</code> on the Sepolia smart contract. The creator specifies between 2 and 20 options, a duration from 1 minute up to 30 days, and chooses whether to enable <strong>Blind Voting</strong>.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-badge-num">2</div>
+          <h3 class="step-title">One-Address One-Vote Enforcement</h3>
+          <p class="step-desc">
+            Voters connect their Web3 wallet and invoke <code>vote(pollId, optionId)</code>. The contract updates the internal tally and permanently locks <code>hasVoted[pollId][voter] = true</code>, mathematically eliminating double voting and Sybil manipulation.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-badge-num">3</div>
+          <h3 class="step-title">Mathematical Reveal & Resolution</h3>
+          <p class="step-desc">
+            In standard ballots, results update live with percentage progress bars. In Blind ballots, vote tallies are hidden until <code>block.timestamp &gt;= endTime</code>. Once concluded, the winning option receives the official winner stamp or ties are reported.
+          </p>
+        </div>
+      </section>
+
+      <!-- Comprehensive Categorized & Searchable FAQ Section -->
+      <section id="faq" class="anchor-target" style="margin-bottom: 80px;">
+        <div class="section-head" style="text-align: center; margin-bottom: 32px;">
+          <span class="section-tag">PROTOCOL KNOWLEDGEBASE</span>
+          <h2 class="section-title">FREQUENTLY ASKED QUESTIONS</h2>
+          <p class="section-desc" style="max-width: 620px; margin: 0 auto;">
+            Search and explore in-depth answers across Getting Started, Voting Mechanics, Ballot Parameters, Cryptographic Trust, and Community Governance.
+          </p>
+        </div>
+
+        <!-- Live Search Bar -->
+        <div class="faq-search-wrapper">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="faqSearchInput" class="search-input" placeholder="Search questions, keywords or rules..." aria-label="Search FAQ" />
+        </div>
+
+        <!-- Category Filter Pills -->
+        <div class="faq-category-nav" role="tablist" aria-label="FAQ Categories">
+          <button type="button" class="faq-category-btn active" data-category="all">All Categories</button>
+          <button type="button" class="faq-category-btn" data-category="getting-started">Getting Started</button>
+          <button type="button" class="faq-category-btn" data-category="voting">Voting</button>
+          <button type="button" class="faq-category-btn" data-category="polls">Polls</button>
+          <button type="button" class="faq-category-btn" data-category="trust">Trust & Data</button>
+          <button type="button" class="faq-category-btn" data-category="communities">Communities</button>
+        </div>
+
+        <div class="faq-two-col-layout">
+          <!-- Left Column: Accordion List -->
+          <div class="accordion-list" id="faqAccordionList">
+            <!-- Getting Started -->
+            <div class="faq-accordion-item open" data-category="getting-started">
+              <button type="button" class="faq-question-btn" aria-expanded="true">
+                <span>What wallet do I need to connect to VOICE?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Any standard Ethereum Web3 wallet works seamlessly, including MetaMask, Coinbase Wallet, Rabby, Brave Wallet, and Rainbow. Simply install the extension and click "Connect Wallet".</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="getting-started">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>Where do I get Sepolia testnet ETH?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Sepolia ETH is completely free. You can request test tokens from official faucets like the Google Cloud Web3 Sepolia Faucet or the Alchemy Sepolia Faucet. Each claim provides enough ETH for hundreds of ballot interactions.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="getting-started">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>How do I switch my network to Ethereum Sepolia?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>If your wallet is on Mainnet or another network, click the network ribbon badge in the navbar that reads "SWITCH TO SEPOLIA". VOICE automatically triggers the standard <code>wallet_switchEthereumChain</code> prompt in your wallet.</p>
+              </div>
+            </div>
+
+            <!-- Voting -->
+            <div class="faq-accordion-item" data-category="voting">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>How is "one vote per wallet" strictly enforced?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>The contract maintains a storage mapping <code>hasVoted[pollId][voterAddress]</code>. The EVM checks this before logging any vote. Once mined, the slot is locked to <code>true</code> and any further attempt reverts with <code>"Already voted"</code>.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="voting">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>What are Blind Voting ballots?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Blind voting hides tallies and percentages while the poll is ongoing, stopping herd mentality and social influence bias. The full results are unlocked and verifiable as soon as the poll duration expires.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="voting">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>Can I change or retract my vote after casting it?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>No. Once included in an Ethereum block, state modifications are immutable. Your vote selection cannot be undone or re-cast.</p>
+              </div>
+            </div>
+
+            <!-- Polls -->
+            <div class="faq-accordion-item" data-category="polls">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>What are the duration limits when creating a poll?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Polls can last anywhere from 1 minute (60 seconds) up to 30 days (43,200 minutes / 2,592,000 seconds), providing flexibility for rapid consensus checks or month-long governance initiatives.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="polls">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>What is the maximum number of options allowed?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Between 2 and 20 options can be added per poll. This provides a balance between expressive voting options and gas-efficient storage.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="polls">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>How does soft delete (Archiving) work?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>When a poll has ended or been cancelled, its creator can call <code>archivePoll(pollId)</code>. Archiving soft-deletes the poll from active lists to keep discovery feeds tidy. The creator can unarchive it at any time, and the underlying vote history remains permanently visible on Etherscan.</p>
+              </div>
+            </div>
+
+            <!-- Trust & Data -->
+            <div class="faq-accordion-item" data-category="trust">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>Is the smart contract source code publicly verified?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Yes. The MultiPollVoting smart contract is verified on Sepolia Etherscan. Anyone can inspect the Solidity code, review constructor parameters, and run static analysis tools.</p>
+              </div>
+            </div>
+
+            <div class="faq-accordion-item" data-category="trust">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>Can the platform owners manipulate results?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>No. The contract does not have administrative functions to alter vote counts, delete ballots from the blockchain, or access user private keys. It is strictly non-custodial.</p>
+              </div>
+            </div>
+
+            <!-- Communities -->
+            <div class="faq-accordion-item" data-category="communities">
+              <button type="button" class="faq-question-btn" aria-expanded="false">
+                <span>What are upcoming community governance features?</span>
+                <svg class="faq-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="faq-answer-panel">
+                <p>Planned features include token-gated ballots (voting power scaled to ERC-20 token holdings or NFT membership), custom community spaces, and zero-knowledge anonymous voting via Semaphore / MACI.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Meme Art Card -->
+          <div id="faqMemeContainer">
+            <!-- Injected by js/how-it-works.js -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Verify a Vote Quick Box -->
+      <section style="margin-bottom: 72px;">
+        <div class="cta-banner-card" style="padding: 40px; background: var(--surface-card); border: 2px solid var(--accent-lime);">
+          <div class="cta-banner-content" style="max-width: 640px;">
+            <span class="section-tag" style="color:var(--accent-lime); border-color:var(--accent-lime);">INSTANT AUDIT</span>
+            <h2 class="cta-banner-title" style="font-size: 2.2rem; margin-top: 8px;">VERIFY ANY BALLOT TRANSACTION</h2>
+            <p class="cta-banner-desc" style="margin-bottom: 20px;">
+              Every vote emits an unforgeable <code>VoteCast</code> event on Ethereum Sepolia. Paste any transaction hash into our standalone cryptographic verifier to decode the voter address, chosen option, and block receipt.
+            </p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <a href="verify.html" class="btn-primary">
+                <span>Open Vote Verifier</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </a>
+              <a href="leaderboard.html" class="btn-secondary">
+                <span>View Community XP</span>
+              </a>
+            </div>
+          </div>
+          <div class="cta-banner-art" style="width: 140px; height: 140px;">
+            <svg viewBox="0 0 100 100" width="140" height="140" fill="none">
+              <circle cx="50" cy="50" r="44" fill="#141414" stroke="#C6FF4D" stroke-width="4"/>
+              <polyline points="32 50 45 64 70 36" stroke="#C6FF4D" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- Protocol Roadmap Section -->
+      <section id="roadmap" class="anchor-target">
+        <div class="section-head" style="text-align: left; margin-bottom: 32px;">
+          <span class="section-tag">MILESTONES</span>
+          <h2 class="section-title">PROTOCOL ROADMAP</h2>
+        </div>
+
+        <div class="roadmap-grid">
+          <div class="roadmap-card">
+            <span class="roadmap-badge badge-completed">COMPLETED</span>
+            <h3 style="font-size: 1.2rem; font-weight: 700; color: var(--text);">Multi-Poll Core Engine</h3>
+            <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">
+              Support up to 20 options per poll, custom durations up to 30 days, double-vote prevention, and Etherscan source code verification on Sepolia.
+            </p>
+          </div>
+
+          <div class="roadmap-card">
+            <span class="roadmap-badge badge-completed">COMPLETED</span>
+            <h3 style="font-size: 1.2rem; font-weight: 700; color: var(--text);">Blind Voting & Soft Delete</h3>
+            <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">
+              Added secret ballots hiding tallies until closure, early completion controls, on-chain soft deletion archiving, and responsive multi-page Voice UI.
+            </p>
+          </div>
+
+          <div class="roadmap-card">
+            <span class="roadmap-badge badge-planned">PLANNED</span>
+            <h3 style="font-size: 1.2rem; font-weight: 700; color: var(--text);">Token-Weighted Governance</h3>
+            <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5;">
+              Snapshot-style ERC-20 token weight checkpointing and zero-knowledge anonymous voting via Semaphore / MACI.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Shared Minimal Footer (Static Fallback, Hydrated by layout.js) -->
+  <footer class="footer-wrapper" role="contentinfo">
+    <div class="footer-container">
+      <div class="footer-strip-banner">
+        <div class="footer-strip-tag">MULTI-OPTION ON-CHAIN CONSENSUS</div>
+        <div class="footer-strip-cta">
+          <a href="polls.html" class="btn-secondary btn-sm">Explore Active Ballots</a>
+        </div>
+      </div>
+
+      <div class="footer-grid">
+        <div class="footer-brand-col">
+          <a href="index.html" class="brand" aria-label="VOICE Home">
+            <div class="brand-cube-mark" aria-hidden="true">
+              <svg class="brand-cube-svg" viewBox="0 0 32 32" width="36" height="36" fill="none">
+                <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
+            </div>
+            <span class="brand-title">VOICE</span>
+          </a>
+          <p class="footer-desc">
+            Decentralized consensus protocol on Ethereum Sepolia. Run transparent multi-option polls, blind ballots, and community votes with zero double voting.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Protocol Pages</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="polls.html">Browse Polls</a></li>
+            <li><a href="create.html">Create a Poll</a></li>
+            <li><a href="dashboard.html">My Activity</a></li>
+            <li><a href="leaderboard.html">Leaderboard & XP</a></li>
+            <li><a href="verify.html">Verify a Vote</a></li>
+            <li><a href="how-it-works.html">How It Works</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="footer-heading">Developers & Trust</h4>
+          <ul class="footer-links">
+            <li><a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer">Smart Contract Code</a></li>
+            <li><a href="verify.html">Cryptographic Vote Verifier</a></li>
+            <li><a href="how-it-works.html#faq">FAQ & Rules</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>&copy; 2026 VOICE. Built for decentralized consensus on Ethereum Sepolia.</div>
+        <div class="meme-disclaimer">Meme art belongs to its original creators; used for demo purposes</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Page Logic Module -->
+  <script type="module" src="js/how-it-works.js"></script>
+</body>
+</html>

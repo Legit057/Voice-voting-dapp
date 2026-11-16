@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Retro Meme Wink Smiley Sticker -->
+  <circle cx="50" cy="50" r="44" fill="#FFC20E" stroke="#0A0A0A" stroke-width="6"/>
+  <!-- Left Eye: Wink arc -->
+  <path d="M28 42c4-6 12-6 16 0" stroke="#0A0A0A" stroke-width="6" stroke-linecap="round"/>
+  <!-- Right Eye: Big Wide Dot -->
+  <circle cx="68" cy="40" r="6" fill="#0A0A0A"/>
+  <!-- Smile with Tongue -->
+  <path d="M26 56c4 16 34 16 48 0" stroke="#0A0A0A" stroke-width="6" stroke-linecap="round"/>
+  <path d="M42 63c0 8 16 8 16 0" fill="#FF5A1F" stroke="#0A0A0A" stroke-width="4"/>
+  <!-- Glare highlight -->
+  <ellipse cx="36" cy="22" rx="10" ry="4" transform="rotate(-30 36 22)" fill="#FFF8EE" opacity="0.6"/>
+</svg>
