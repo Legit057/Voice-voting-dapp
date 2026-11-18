@@ -6,7 +6,7 @@ function maskUrl(url) {
   return url.replace(/([a-zA-Z0-9_-]{20,})/g, (m) => m.slice(0, 4) + '...' + m.slice(-4));
 }
 
-const ORIGIN = 'https://voice-voting-dapp-frontend.vercel.app';
+const ORIGIN = 'https://voice-voting-dapp.vercel.app';
 const SEPOLIA_NETWORK = { name: 'sepolia', chainId: 11155111 };
 
 function createReq(url, timeoutMs = 4000) {

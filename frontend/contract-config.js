@@ -2,6 +2,7 @@
 export const CONTRACT_ADDRESS = "0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0";
 export const VERIFIED = true;
 export const DEPLOY_BLOCK = 12141068;
+export const SITE_URL = "https://voice-voting-dapp.vercel.app";
 
 // Public Sepolia RPC endpoints tried in order (fallback-enabled)
 export const READ_RPC_URLS = [

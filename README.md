@@ -4,7 +4,7 @@ A simple multi-poll voting dApp where polls and votes live on the Ethereum Sepol
 
 ## Live Demo
 
-Live demo: [https://example.invalid](https://example.invalid) *(will be updated once deployed)*
+Live demo: [https://voice-voting-dapp.vercel.app](https://voice-voting-dapp.vercel.app)
 
 ## Screenshots
 

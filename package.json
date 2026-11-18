@@ -2,6 +2,7 @@
   "name": "eth-voting-dapp",
   "version": "1.0.0",
   "description": "Multi-Poll Voting dApp on Ethereum Sepolia",
+  "homepage": "https://voice-voting-dapp.vercel.app",
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
