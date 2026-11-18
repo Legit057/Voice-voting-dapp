@@ -3,22 +3,15 @@
  * Injects Shared Pill Navbar with Isometric 3D Cube Logo, Footer with Network Telemetry, Wallet Dropdown, XP Level Chip
  */
 
+import './debug.js';
 import { initTheme } from './theme.js';
-import {
-  initWeb3,
-  connectWallet,
-  disconnectWallet,
-  getCurrentAccount,
-  isWalletConnected,
-  getAccountBalance,
-  checkAndSwitchNetwork,
-  isCorrectNetwork,
-  getNetworkStatus
-} from './web3.js';
+import { getNetworkStatus, getAccountBalance } from './web3.js';
+import * as wallet from './wallet.js';
 import { shortenAddress, showToast, createIdenticonSvg } from './ui.js';
 import { CONTRACT_ADDRESS, VERIFIED } from '../contract-config.js';
 import { initPerRouteStickers } from './scene3d.js';
 import { initPageTransitions } from './transitions.js';
+import { showDebugOverlay } from './debug.js';
 
 export function injectLayout() {
   try {
@@ -33,34 +26,37 @@ export function injectLayout() {
   try { injectNavbar(); } catch (err) { console.error('injectNavbar failed:', err); }
   try { injectFooter(); } catch (err) { console.error('injectFooter failed:', err); }
   try { initTheme(); } catch (err) { console.error('initTheme failed:', err); }
-  try { initWeb3(); } catch (err) { console.error('initWeb3 failed:', err); }
   try { setupNavEventListeners(); } catch (err) { console.error('setupNavEventListeners failed:', err); }
   try { updateNetworkStatusPanel(); } catch (err) { console.error('updateNetworkStatusPanel failed:', err); }
   try { initPerRouteStickers(); } catch (err) { console.error('initPerRouteStickers failed:', err); }
   try { initPageTransitions(); } catch (err) { console.error('initPageTransitions failed:', err); }
 
-  // Periodic network telemetry update
+  // Subscribe layout to wallet state changes
+  wallet.subscribe((walletState) => {
+    try {
+      updateWalletButtonState(walletState);
+      updateNetworkRibbonState(walletState);
+    } catch (err) {
+      console.error('wallet subscription update error in layout:', err);
+    }
+  });
+
+  // Periodic network telemetry update (every 15s)
   setInterval(() => {
     try { updateNetworkStatusPanel(); } catch (err) { console.error('updateNetworkStatusPanel interval error:', err); }
-  }, 12000);
+  }, 15000);
 }
 
 /* --------------------------------------------------------------------------
    Isometric Cube Logo SVG Component
-   Top face lime #C6FF4D, left face orange #FF5A1F with white check,
-   right face darker orange #D9430F, stroke using currentColor (theme text color).
    -------------------------------------------------------------------------- */
 export function getIsometricCubeLogoSvg(size = 32) {
   return `
     <div class="brand-cube-mark" aria-hidden="true">
       <svg class="brand-cube-svg" viewBox="0 0 32 32" width="${size}" height="${size}" fill="none">
-        <!-- Top Face Lime #C6FF4D -->
         <path d="M16 3 L28 10 L16 17 L4 10 Z" fill="#C6FF4D" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
-        <!-- Left Face Orange #FF5A1F with check -->
         <path d="M4 10 L16 17 L16 29 L4 22 Z" fill="#FF5A1F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
-        <!-- Right Face Darker Orange #D9430F -->
         <path d="M16 17 L28 10 L28 22 L16 29 Z" fill="#D9430F" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
-        <!-- White Check Mark on Left Face -->
         <polyline points="7 19 11 23 15 15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>
     </div>
@@ -73,7 +69,7 @@ export function getIsometricCubeLogoSvg(size = 32) {
 function injectNavbar() {
   const currentPath = window.location.pathname.toLowerCase();
   const getActiveClass = (page) => {
-    if (page === 'index' && (currentPath.endsWith('/') || currentPath.endsWith('index.html') || currentPath === '')) {
+    if (page === 'index' && (currentPath.endsWith('/') || currentPath.endsWith('index.html') || currentPath.endsWith('/index') || currentPath === '')) {
       return 'active';
     }
     if (currentPath.includes(page)) {
@@ -86,13 +82,13 @@ function injectNavbar() {
     <div class="nav-wrapper">
       <header class="navbar" role="banner">
         <div class="nav-container">
-          <!-- 1. Brand Logo: Isometric Cube Mark + VOICE alone -->
+          <!-- 1. Brand Logo -->
           <a href="index.html" class="brand" aria-label="VOICE Home">
             ${getIsometricCubeLogoSvg(32)}
             <span class="brand-title">VOICE</span>
           </a>
 
-          <!-- 2. Nav Center Links: Priority-Plus Navigation -->
+          <!-- 2. Nav Center Links -->
           <nav class="nav-center-links" id="navCenterLinks" aria-label="Main Navigation">
             <div class="nav-primary-links" id="navPrimaryLinks">
               <a href="index.html" class="nav-link ${getActiveClass('index')}">Home</a>
@@ -123,55 +119,46 @@ function injectNavbar() {
           <!-- 3. Flexible Space -->
           <div class="nav-flexible-space"></div>
 
-            <!-- Network Ribbon -->
-            <div id="networkRibbon" class="network-ribbon" title="Connected to Ethereum Sepolia" role="status">
-              <span class="status-dot"></span>
-              <span id="networkRibbonText">SEPOLIA</span>
-            </div>
+          <!-- Network Ribbon -->
+          <div id="networkRibbon" class="network-ribbon" title="Connected to Ethereum Sepolia" role="status">
+            <span class="status-dot"></span>
+            <span id="networkRibbonText">SEPOLIA</span>
+          </div>
 
-            <!-- Dark / Light Theme Toggle -->
-            <button type="button" id="themeToggleBtn" class="btn-icon-toggle" aria-label="Toggle Theme">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="5"></circle>
-                <line x1="12" y1="1" x2="12" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="23"></line>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                <line x1="1" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="12" x2="23" y2="12"></line>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-              </svg>
+          <!-- Dark / Light Theme Toggle -->
+          <button type="button" id="themeToggleBtn" class="btn-icon-toggle" aria-label="Toggle Theme">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+
+          <!-- Wallet Area -->
+          <div class="wallet-dropdown-wrapper">
+            <button type="button" id="walletConnectBtn" class="btn-wallet-connect">
+              <div class="skeleton-line" style="width:110px; height:24px; border-radius:999px;"></div>
             </button>
 
-            <!-- Wallet Area -->
-            <div class="wallet-dropdown-wrapper">
-              <button type="button" id="walletConnectBtn" class="btn-wallet-connect">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"></path>
-                  <path d="M4 6v12c0 1.1.9 2 2 2h14v-4"></path>
-                  <circle cx="18" cy="16" r="2"></circle>
-                </svg>
-                <span>Connect Wallet</span>
-              </button>
-
-              <!-- Connected Wallet Dropdown Menu -->
-              <div id="walletDropdownMenu" class="wallet-dropdown-menu" role="menu">
-                <div class="wallet-menu-header">
-                  <div class="wallet-menu-row">
-                    <span class="wallet-menu-label">Sepolia Balance</span>
-                    <span class="wallet-menu-val" id="menuBalanceVal">0.000 SEP</span>
-                  </div>
-                  <div class="wallet-menu-row">
-                    <span class="wallet-menu-label">Reputation XP</span>
-                    <span class="wallet-menu-val" id="menuXpStatus">Level 1 &bull; 0 XP</span>
-                  </div>
-                  <div class="wallet-menu-row wallet-network-row">
-                    <span class="status-dot"></span>
-                    <span class="wallet-menu-val">Ethereum Sepolia (11155111)</span>
+            <!-- Connected Wallet Dropdown Menu -->
+            <div id="walletDropdownMenu" class="wallet-dropdown-menu" role="menu">
+              <div class="wallet-menu-header">
+                <div class="menu-avatar-row">
+                  <div id="menuAvatarIcon"></div>
+                  <div>
+                    <div id="menuShortAddr" style="font-weight:700;"></div>
+                    <div id="menuBalanceVal" style="font-size:0.8rem; opacity:0.8;">0.000 SEP</div>
                   </div>
                 </div>
-
+                <div id="menuXpStatus" class="menu-xp-status">Level 1 • 0 XP</div>
+              </div>
+              <div class="wallet-menu-actions">
                 <button type="button" class="wallet-menu-item" id="menuCopyAddressBtn">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -187,15 +174,6 @@ function injectNavbar() {
                   </svg>
                   <span>View on Etherscan</span>
                 </a>
-                <a href="dashboard.html" class="wallet-menu-item">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="7"></rect>
-                    <rect x="14" y="3" width="7" height="7"></rect>
-                    <rect x="14" y="14" width="7" height="7"></rect>
-                    <rect x="3" y="14" width="7" height="7"></rect>
-                  </svg>
-                  <span>My Activity</span>
-                </a>
                 <button type="button" class="wallet-menu-item danger" id="menuDisconnectBtn">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -206,24 +184,25 @@ function injectNavbar() {
                 </button>
               </div>
             </div>
+          </div>
 
-            <!-- 7. Create Button -->
-            <a href="create.html" class="btn-primary btn-nav-create" aria-label="Create Poll">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              <span class="btn-create-text">Create</span>
-            </a>
+          <!-- Create Button -->
+          <a href="create.html" class="btn-primary btn-nav-create" aria-label="Create Poll">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span class="btn-create-text">Create</span>
+          </a>
 
-            <!-- Mobile Hamburger Toggle -->
-            <button type="button" class="btn-hamburger" id="navHamburgerBtn" aria-label="Toggle navigation menu" aria-expanded="false">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </svg>
-            </button>
+          <!-- Mobile Hamburger Toggle -->
+          <button type="button" class="btn-hamburger" id="navHamburgerBtn" aria-label="Toggle navigation menu" aria-expanded="false">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
         </div>
 
         <!-- Mobile Drawer -->
@@ -259,12 +238,11 @@ function injectNavbar() {
    2. Inject Shared Footer & Telemetry
    -------------------------------------------------------------------------- */
 function injectFooter() {
-
   const footerHtml = `
     <footer class="footer-wrapper" role="contentinfo">
       <div class="container">
         <!-- Live Network Telemetry Status Panel -->
-        <div class="network-status-panel">
+        <div class="network-status-panel" id="footerNetworkPanel" style="cursor:pointer;" title="Click to open Diagnostic Panel (Ctrl+Shift+D)">
           <div class="net-item">
             <span class="status-dot" id="footerStatusDot" style="color:#00D26A;"></span>
             <span class="net-label">Network:</span>
@@ -278,7 +256,7 @@ function injectFooter() {
 
           <div class="net-item">
             <span class="net-label">Gas:</span>
-            <span class="net-val" id="footerGasPrice" style="color:var(--accent-orange);">~0.1 Gwei</span>
+            <span class="net-val" id="footerGasPrice" style="color:var(--text-muted, #94A3B8);">~0.1 Gwei</span>
           </div>
 
           <div class="net-item">
@@ -297,7 +275,7 @@ function injectFooter() {
 
           <div class="net-item">
             <span class="net-label">Status:</span>
-            <span class="net-val" id="footerReachableStatus" style="color:#00D26A;">Reachable</span>
+            <span class="net-val" id="footerReachableStatus" style="color:#00D26A;" title="Checking health...">Checking...</span>
           </div>
 
           <div class="net-item">
@@ -366,7 +344,8 @@ function injectFooter() {
   // Bind footer contract copy button
   const copyBtn = document.getElementById('footerCopyContractBtn');
   if (copyBtn) {
-    copyBtn.addEventListener('click', () => {
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       navigator.clipboard.writeText(CONTRACT_ADDRESS);
       showToast('Contract address copied to clipboard!', 'success');
     });
@@ -380,15 +359,18 @@ function setupNavEventListeners() {
   const walletBtn = document.getElementById('walletConnectBtn');
   const dropdownMenu = document.getElementById('walletDropdownMenu');
   const copyAddressBtn = document.getElementById('menuCopyAddressBtn');
-  const viewEtherscanLink = document.getElementById('menuViewEtherscanLink');
   const disconnectBtn = document.getElementById('menuDisconnectBtn');
   const networkRibbon = document.getElementById('networkRibbon');
 
-  // Network Switch on Ribbon Click (if wrong network)
+  // Network Switch on Ribbon Click
   if (networkRibbon) {
     networkRibbon.addEventListener('click', async () => {
-      if (networkRibbon.classList.contains('wrong-network')) {
-        await checkAndSwitchNetwork();
+      if (wallet.state.status === 'wrong_network') {
+        try {
+          await wallet.switchToSepolia();
+        } catch (err) {
+          showToast('Failed to switch network: ' + (err.message || err), 'error');
+        }
       }
     });
   }
@@ -397,10 +379,26 @@ function setupNavEventListeners() {
   if (walletBtn) {
     walletBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!isWalletConnected()) {
-        await connectWallet();
+      if (wallet.state.status === 'pending') return;
+
+      if (wallet.state.status === 'wrong_network') {
+        try {
+          await wallet.switchToSepolia();
+        } catch (err) {
+          showToast('Failed to switch network: ' + (err.message || err), 'error');
+        }
+        return;
+      }
+
+      if (wallet.state.status === 'connected') {
+        if (dropdownMenu) dropdownMenu.classList.toggle('show');
       } else {
-        dropdownMenu.classList.toggle('show');
+        try {
+          await wallet.connect();
+          showToast('Wallet connected!', 'success');
+        } catch (err) {
+          showToast(err.message || 'Connection failed', 'error');
+        }
       }
     });
   }
@@ -415,29 +413,23 @@ function setupNavEventListeners() {
   // Copy Address
   if (copyAddressBtn) {
     copyAddressBtn.addEventListener('click', () => {
-      const addr = getCurrentAccount();
+      const addr = wallet.state.address;
       if (addr) {
         navigator.clipboard.writeText(addr);
         showToast('Address copied to clipboard!', 'success');
       }
-      dropdownMenu.classList.remove('show');
+      if (dropdownMenu) dropdownMenu.classList.remove('show');
     });
   }
 
   // Disconnect
   if (disconnectBtn) {
     disconnectBtn.addEventListener('click', () => {
-      disconnectWallet();
-      dropdownMenu.classList.remove('show');
+      wallet.disconnect();
+      if (dropdownMenu) dropdownMenu.classList.remove('show');
+      showToast('Wallet disconnected.', 'info');
     });
   }
-
-  // Listen to wallet state changes
-  window.addEventListener('walletStateChanged', async (e) => {
-    const { account, connected } = e.detail;
-    updateWalletButtonState(account, connected);
-    await updateNetworkRibbonState();
-  });
 
   // More Dropdown toggle
   const moreWrapper = document.getElementById('navMoreWrapper');
@@ -503,19 +495,37 @@ function setupNavEventListeners() {
   }
 }
 
-export async function updateWalletButtonState(account, connected) {
+export async function updateWalletButtonState(walletState) {
   const walletBtn = document.getElementById('walletConnectBtn');
   const viewEtherscanLink = document.getElementById('menuViewEtherscanLink');
   const menuXpStatus = document.getElementById('menuXpStatus');
   const menuBalanceVal = document.getElementById('menuBalanceVal');
+  const menuShortAddr = document.getElementById('menuShortAddr');
+  const menuAvatarIcon = document.getElementById('menuAvatarIcon');
   if (!walletBtn) return;
 
-  if (connected && account) {
+  if (walletState.status === 'pending') {
+    walletBtn.className = 'btn-wallet-connect skeleton';
+    walletBtn.innerHTML = `
+      <div class="skeleton-line" style="width:110px; height:24px; border-radius:999px;"></div>
+    `;
+    return;
+  }
+
+  if (walletState.status === 'wrong_network') {
+    walletBtn.className = 'btn-wallet-connect wrong-network';
+    walletBtn.innerHTML = `
+      <span style="color:#FFF; font-weight:700;">Switch to Sepolia</span>
+    `;
+    return;
+  }
+
+  if (walletState.status === 'connected' && walletState.address) {
+    const account = walletState.address;
     const balance = await getAccountBalance(account);
     const shortAddr = shortenAddress(account);
     const avatarSvg = createIdenticonSvg(account, 24);
 
-    // Calculate level from local cache or default Level 1
     const userXp = Number(localStorage.getItem(`multipoll_xp_${account.toLowerCase()}`)) || 0;
     const userLevel = Math.floor(userXp / 100) + 1;
 
@@ -531,6 +541,12 @@ export async function updateWalletButtonState(account, connected) {
       </svg>
     `;
 
+    if (menuAvatarIcon) {
+      menuAvatarIcon.innerHTML = createIdenticonSvg(account, 36);
+    }
+    if (menuShortAddr) {
+      menuShortAddr.textContent = shortAddr;
+    }
     if (menuBalanceVal) {
       menuBalanceVal.textContent = `${balance} SEP`;
     }
@@ -559,20 +575,19 @@ export async function updateWalletButtonState(account, connected) {
   }
 }
 
-async function updateNetworkRibbonState() {
+function updateNetworkRibbonState(walletState) {
   const ribbon = document.getElementById('networkRibbon');
   const ribbonText = document.getElementById('networkRibbonText');
   if (!ribbon || !ribbonText) return;
 
-  const isSepolia = await isCorrectNetwork();
-  if (isSepolia) {
-    ribbon.className = 'network-ribbon';
-    ribbonText.textContent = 'SEPOLIA';
-    ribbon.title = 'Connected to Ethereum Sepolia';
-  } else {
+  if (walletState.status === 'wrong_network') {
     ribbon.className = 'network-ribbon wrong-network';
     ribbonText.textContent = 'SWITCH TO SEPOLIA';
     ribbon.title = 'Wrong network! Click to switch to Ethereum Sepolia';
+  } else {
+    ribbon.className = 'network-ribbon';
+    ribbonText.textContent = 'SEPOLIA';
+    ribbon.title = 'Connected to Ethereum Sepolia';
   }
 }
 
@@ -590,17 +605,20 @@ async function updateNetworkStatusPanel() {
 
   if (gasEl && status.gasPriceGwei) {
     gasEl.textContent = `${status.gasPriceGwei} Gwei`;
+    gasEl.style.color = status.gasIsHigh ? 'var(--accent-red, #EF4444)' : 'var(--text-muted, #94A3B8)';
   }
 
   if (statusEl && dotEl) {
     if (status.reachable) {
-      statusEl.textContent = 'Reachable';
+      statusEl.textContent = 'Operational';
       statusEl.style.color = '#00D26A';
+      statusEl.title = 'All systems operational (Block, Bytecode, getPollCount pass)';
       dotEl.style.color = '#00D26A';
     } else {
       statusEl.textContent = 'Degraded';
-      statusEl.style.color = 'var(--accent-red)';
-      dotEl.style.color = 'var(--accent-red)';
+      statusEl.style.color = '#FFA500'; // Amber
+      statusEl.title = status.failingCheck ? `Degraded: ${status.failingCheck}` : 'Degraded: Network check failed';
+      dotEl.style.color = '#FFA500';
     }
   }
 }

@@ -1,14 +1,15 @@
 /**
  * MULTIPOLL • js/polls-service.js
  * Centralized Data Layer for Poll Queries, Voting, Archiving, and Card Rendering
+ * Uses unified resilient read provider with retry and batch fallback
  */
 
-import { getReadContract, getWriteContract, getCurrentAccount, checkAndSwitchNetwork, isWalletConnected, connectWallet } from './web3.js';
+import { withReadRetry, getReadContract, getWriteContract } from './web3.js';
+import * as wallet from './wallet.js';
 import {
   createIdenticonSvg,
   shortenAddress,
   formatTimeRemaining,
-  formatTimeLeft,
   areAddressesEqual,
   guardString,
   confirmDialog,
@@ -16,107 +17,187 @@ import {
   parseContractError,
   fireConfetti,
   showVoteReceiptModal,
-  isPollHidden,
-  hidePollForMe
+  isPollHidden
 } from './ui.js';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../contract-config.js';
 
 /* --------------------------------------------------------------------------
-   1. Fetch Polls & Options (Read-Only Safe)
+   1. Fetch Polls & Options (Resilient with Batch-of-5 Fallback)
    -------------------------------------------------------------------------- */
 export async function fetchAllPolls() {
-  const contract = getReadContract();
-  if (!contract) return [];
+  const ethers = window.ethers;
+  if (!ethers) throw new Error('ethers.js not available');
 
+  let rawPolls = null;
+  let fallbackNeeded = false;
+
+  // 1. Try batch fetch (getAllPolls or getPolls)
   try {
-    const rawPolls = await contract.getAllPolls();
-    if (!rawPolls || rawPolls.length === 0) return [];
-
-    const userAccount = getCurrentAccount();
-    const formatted = [];
-
-    for (let i = 0; i < rawPolls.length; i++) {
-      const p = rawPolls[i];
-      if (!p.exists) continue;
-
-      const pollId = Number(p.id);
-      let options = [];
-
-      try {
-        const rawOpts = await contract.getPollOptions(pollId);
-        options = rawOpts.map((opt) => ({
-          id: Number(opt.id),
-          name: opt.name,
-          voteCount: Number(opt.voteCount)
-        }));
-      } catch (optErr) {
-        console.warn(`Failed to fetch options for poll #${pollId}:`, optErr);
+    rawPolls = await withReadRetry(async (p) => {
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+      if (typeof contract.getAllPolls === 'function') {
+        return await contract.getAllPolls();
       }
+      const count = await contract.getPollCount();
+      return await contract.getPolls(0, Number(count));
+    });
+  } catch (batchErr) {
+    console.warn('Batch fetchAllPolls failed, attempting per-poll fallback in batches of 5:', batchErr);
+    fallbackNeeded = true;
+  }
 
-      // Check if current user voted
-      let userHasVoted = false;
-      let userChoice = null;
+  // 2. Fallback: query count and getPoll(i) in batches of 5
+  if (fallbackNeeded || !rawPolls) {
+    try {
+      const pollCount = await withReadRetry(async (p) => {
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+        return await contract.getPollCount();
+      });
 
-      if (userAccount) {
-        try {
-          userHasVoted = await contract.hasVoted(pollId, userAccount);
-          if (userHasVoted) {
-            userChoice = Number(await contract.getVoterChoice(pollId, userAccount));
-          }
-        } catch (e) {
-          // ignore
+      const total = Number(pollCount);
+      rawPolls = [];
+
+      for (let i = 0; i < total; i += 5) {
+        const batchEnd = Math.min(i + 5, total);
+        const batchPromises = [];
+        for (let id = i; id < batchEnd; id++) {
+          batchPromises.push(
+            withReadRetry(async (p) => {
+              const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+              return await contract.getPoll(id);
+            }).catch((err) => {
+              console.warn(`Failed to fetch individual poll #${id}:`, err);
+              return null;
+            })
+          );
+        }
+        const batchResults = await Promise.all(batchPromises);
+        for (const item of batchResults) {
+          if (item) rawPolls.push(item);
         }
       }
+    } catch (countErr) {
+      console.error('getPollCount fallback also failed:', countErr);
+      throw countErr;
+    }
+  }
 
-      formatted.push({
-        id: pollId,
-        title: p.title,
-        description: p.description,
-        creator: p.creator,
-        endTime: Number(p.endTime),
-        totalVotes: Number(p.totalVotes),
-        isBlind: Boolean(p.isBlind),
-        isCancelled: Boolean(p.isCancelled),
-        archived: Boolean(p.archived),
-        options,
-        userHasVoted,
-        userChoice
+  if (!rawPolls || rawPolls.length === 0) return [];
+
+  const userAccount = wallet.state.address;
+  const formatted = [];
+
+  for (let i = 0; i < rawPolls.length; i++) {
+    const p = rawPolls[i];
+    if (!p || !p.exists) continue;
+
+    const pollId = Number(p.id);
+    let options = [];
+
+    try {
+      const rawOpts = await withReadRetry(async (provider) => {
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+        if (typeof contract.getPollOptions === 'function') {
+          return await contract.getPollOptions(pollId);
+        }
+        return await contract.getOptions(pollId);
       });
+
+      options = rawOpts.map((opt) => ({
+        id: Number(opt.id),
+        name: opt.name,
+        voteCount: Number(opt.voteCount)
+      }));
+    } catch (optErr) {
+      console.warn(`Failed to fetch options for poll #${pollId}:`, optErr);
     }
 
-    return formatted;
-  } catch (err) {
-    console.error('Error fetching all polls:', err);
-    return [];
+    // Check if current user voted
+    let userHasVoted = false;
+    let userChoice = null;
+
+    if (userAccount) {
+      try {
+        const voteStatus = await withReadRetry(async (provider) => {
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+          const voted = await contract.hasVoted(pollId, userAccount);
+          let choice = null;
+          if (voted) {
+            choice = Number(await contract.getVoterChoice(pollId, userAccount));
+          }
+          return { voted, choice };
+        });
+        userHasVoted = Boolean(voteStatus.voted);
+        userChoice = voteStatus.choice;
+      } catch (e) {
+        // Non-blocking
+      }
+    }
+
+    formatted.push({
+      id: pollId,
+      title: p.title,
+      description: p.description,
+      creator: p.creator,
+      endTime: Number(p.endTime),
+      totalVotes: Number(p.totalVotes),
+      isBlind: Boolean(p.isBlind),
+      isCancelled: Boolean(p.isCancelled),
+      archived: Boolean(p.archived),
+      options,
+      userHasVoted,
+      userChoice
+    });
   }
+
+  return formatted;
 }
 
 export async function fetchPollById(pollId) {
-  const contract = getReadContract();
-  if (!contract) return null;
+  const ethers = window.ethers;
+  if (!ethers) throw new Error('ethers.js not available');
 
   try {
-    const p = await contract.getPoll(pollId);
+    const p = await withReadRetry(async (provider) => {
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      return await contract.getPoll(pollId);
+    });
+
     if (!p || !p.exists) return null;
 
-    const rawOpts = await contract.getPollOptions(pollId);
+    const rawOpts = await withReadRetry(async (provider) => {
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      if (typeof contract.getPollOptions === 'function') {
+        return await contract.getPollOptions(pollId);
+      }
+      return await contract.getOptions(pollId);
+    });
+
     const options = rawOpts.map((opt) => ({
       id: Number(opt.id),
       name: opt.name,
       voteCount: Number(opt.voteCount)
     }));
 
-    const userAccount = getCurrentAccount();
+    const userAccount = wallet.state.address;
     let userHasVoted = false;
     let userChoice = null;
 
     if (userAccount) {
       try {
-        userHasVoted = await contract.hasVoted(pollId, userAccount);
-        if (userHasVoted) {
-          userChoice = Number(await contract.getVoterChoice(pollId, userAccount));
-        }
+        const voteStatus = await withReadRetry(async (provider) => {
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+          const voted = await contract.hasVoted(pollId, userAccount);
+          let choice = null;
+          if (voted) {
+            choice = Number(await contract.getVoterChoice(pollId, userAccount));
+          }
+          return { voted, choice };
+        });
+        userHasVoted = Boolean(voteStatus.voted);
+        userChoice = voteStatus.choice;
       } catch (e) {
-        // ignore
+        // Non-blocking
       }
     }
 
@@ -136,15 +217,14 @@ export async function fetchPollById(pollId) {
     };
   } catch (err) {
     console.error(`Error fetching poll #${pollId}:`, err);
-    return null;
+    throw err;
   }
 }
 
 /* --------------------------------------------------------------------------
-   2. Contract Mutating Actions: Vote, Cancel, End Early, Archive, Unarchive
+   2. Contract Mutating Actions
    -------------------------------------------------------------------------- */
 export async function executeVote(pollId, optionId, meta = {}, onSuccess = () => {}) {
-  // Support either (pollId, optionId, onSuccess) or (pollId, optionId, meta, onSuccess)
   let callback = onSuccess;
   let details = meta;
   if (typeof meta === 'function') {
@@ -152,13 +232,23 @@ export async function executeVote(pollId, optionId, meta = {}, onSuccess = () =>
     details = {};
   }
 
-  if (!isWalletConnected()) {
-    const connected = await connectWallet();
-    if (!connected) return;
+  if (wallet.state.status !== 'connected') {
+    try {
+      await wallet.connect();
+    } catch (err) {
+      showToast(err.message || 'Please connect your wallet to vote.', 'error');
+      return;
+    }
   }
 
-  const isNetworkOk = await checkAndSwitchNetwork();
-  if (!isNetworkOk) return;
+  if (wallet.state.status === 'wrong_network') {
+    try {
+      await wallet.switchToSepolia();
+    } catch (err) {
+      showToast('Please switch to Ethereum Sepolia to vote.', 'error');
+      return;
+    }
+  }
 
   try {
     showToast('Submitting vote to Ethereum Sepolia...', 'info');
@@ -170,15 +260,13 @@ export async function executeVote(pollId, optionId, meta = {}, onSuccess = () =>
     fireConfetti();
     showToast('Vote confirmed on Sepolia!', 'success', receipt.hash);
 
-    // Update user XP (+10 XP)
-    const userAddr = getCurrentAccount();
+    const userAddr = wallet.state.address;
     if (userAddr) {
       const clean = userAddr.toLowerCase();
       const curXp = Number(localStorage.getItem(`multipoll_xp_${clean}`)) || 0;
       localStorage.setItem(`multipoll_xp_${clean}`, curXp + 10);
     }
 
-    // Resolve poll title and option name if missing
     let pTitle = details.pollTitle;
     let optName = details.optionName;
     if (!pTitle || !optName) {
@@ -194,7 +282,6 @@ export async function executeVote(pollId, optionId, meta = {}, onSuccess = () =>
       }
     }
 
-    // Show Official Vote Receipt Modal
     showVoteReceiptModal({
       pollTitle: pTitle || `Poll #${pollId}`,
       optionName: optName || `Option #${optionId}`,
@@ -292,7 +379,7 @@ export async function executeUnarchivePoll(pollId, onSuccess = () => {}) {
 }
 
 /* --------------------------------------------------------------------------
-   3. Render Poll Card (Voice VoteFi Style)
+   3. Render Poll Card
    -------------------------------------------------------------------------- */
 export function createPollCardHtml(poll, options = {}) {
   const { onCardAction = 'window.handlePollCardAction' } = options;
@@ -300,11 +387,10 @@ export function createPollCardHtml(poll, options = {}) {
   const endTimeNum = Number(poll.endTime);
   const isCancelled = Boolean(poll.isCancelled);
   const isEnded = endTimeNum <= now || isCancelled;
-  const userAccount = getCurrentAccount();
+  const userAccount = wallet.state.address;
   const isCreator = areAddressesEqual(poll.creator, userAccount);
   const isBlindActive = Boolean(poll.isBlind) && !isEnded;
 
-  // Determine winning option
   let maxVotes = -1;
   let winnerOptionId = -1;
   let isTie = false;
@@ -321,7 +407,6 @@ export function createPollCardHtml(poll, options = {}) {
     }
   }
 
-  // Badges (Bug Fix D2: contrast of ENDED tag in both themes, no duplicate "Ended" label)
   const badgesHtml = [];
   if (poll.archived) {
     badgesHtml.push(`<span class="badge badge-archived">Archived</span>`);
@@ -338,11 +423,9 @@ export function createPollCardHtml(poll, options = {}) {
     badgesHtml.push(`<span class="badge badge-blind" title="Results hidden until voting ends">Blind</span>`);
   }
 
-  // Countdown timer text
   const timerInfo = formatTimeRemaining(poll.endTime);
   const timerText = poll.isCancelled ? 'Cancelled' : (isEnded ? 'Voting Closed' : timerInfo.text);
 
-  // Options List (Bug Fix D1: 2-line layout, line 1 option name full width word wrapping, line 2 votes/percentage/badges without overlapping)
   const optionsHtml = poll.options.map((opt) => {
     const isUserChoice = poll.userHasVoted && poll.userChoice === opt.id;
     const isWinner = isEnded && !isTie && opt.id === winnerOptionId && maxVotes > 0;
@@ -364,17 +447,11 @@ export function createPollCardHtml(poll, options = {}) {
 
     return `
       <div class="${rowClass}">
-        <!-- Progress Bar Underlay -->
         <div class="option-progress-bg" style="width: ${isBlindActive ? 0 : percent}%;"></div>
-
-        <!-- 2-Line Option Content -->
         <div class="option-content">
-          <!-- Line 1: Option Name (full width, normal word wrapping) -->
           <div class="option-line-1">
             <span class="option-name">${escapeHtml(opt.name)}</span>
           </div>
-
-          <!-- Line 2: Meta (Votes, Percent, Badges) -->
           <div class="option-line-2">
             <div class="option-meta-left">
               ${votesDisplay} &bull; <span class="option-percent-val">${percentDisplay}</span>
@@ -390,10 +467,7 @@ export function createPollCardHtml(poll, options = {}) {
     `;
   }).join('');
 
-  // Action Buttons
   const actionButtons = [];
-
-  // Creator Controls
   if (isCreator) {
     if (!isEnded && !poll.isCancelled) {
       actionButtons.push(`
@@ -425,7 +499,6 @@ export function createPollCardHtml(poll, options = {}) {
       `);
     }
   } else {
-    // "Hide for me" for non-creators (localStorage only)
     actionButtons.push(`
       <button type="button" class="btn-card-action" title="Hide from your local view" onclick="${onCardAction}('hideForMe', ${poll.id})">
         Hide for me
@@ -435,7 +508,6 @@ export function createPollCardHtml(poll, options = {}) {
 
   return guardString(`
     <article class="poll-card" data-poll-id="${poll.id}">
-      <!-- Card Header -->
       <div class="card-header">
         <div class="card-creator">
           ${createIdenticonSvg(poll.creator, 28)}
@@ -449,11 +521,9 @@ export function createPollCardHtml(poll, options = {}) {
         </div>
       </div>
 
-      <!-- Card Title & Description -->
       <h3 class="card-title">${escapeHtml(poll.title)}</h3>
       <p class="card-desc">${escapeHtml(poll.description)}</p>
 
-      <!-- Countdown Timer Bar -->
       <div class="card-timer-bar">
         <div class="timer-left">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -467,12 +537,10 @@ export function createPollCardHtml(poll, options = {}) {
         </div>
       </div>
 
-      <!-- Options List -->
       <div class="card-options-list">
         ${optionsHtml}
       </div>
 
-      <!-- Card Footer Actions -->
       <div class="card-footer">
         <div class="card-actions-left">
           ${actionButtons.join('')}

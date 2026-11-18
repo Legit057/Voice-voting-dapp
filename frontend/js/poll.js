@@ -17,7 +17,8 @@ import {
   executeArchivePoll,
   executeUnarchivePoll
 } from './polls-service.js';
-import { getCurrentAccount, isWalletConnected, connectWallet, getReadContract, queryContractEvents, CONTRACT_DEPLOY_BLOCK } from './web3.js';
+import { getReadContract, queryContractEvents, CONTRACT_DEPLOY_BLOCK } from './web3.js';
+import * as wallet from './wallet.js';
 import {
   createIdenticonSvg,
   shortenAddress,
@@ -51,8 +52,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('loadSinglePoll failed:', err);
   }
 
-  window.addEventListener('walletStateChanged', async () => {
-    try { await loadSinglePoll(Number(pollId), false); } catch (e) { console.error('walletStateChanged poll reload failed:', e); }
+  wallet.subscribe(() => {
+    try { loadSinglePoll(Number(pollId), false); } catch (e) { console.error('wallet subscription poll reload failed:', e); }
   });
 
   window.addEventListener('themeChanged', () => {
@@ -98,7 +99,7 @@ function renderPollPage(poll) {
   const isCancelled = Boolean(poll.isCancelled);
   const isEnded = endTimeNum <= now || isCancelled;
   const isBlindActive = Boolean(poll.isBlind) && !isEnded;
-  const isCreator = areAddressesEqual(poll.creator, getCurrentAccount());
+  const isCreator = areAddressesEqual(poll.creator, wallet.state.address);
 
   // Determine winner / tie
   let maxVotes = -1;
@@ -582,7 +583,7 @@ function setupShareCardButton(poll) {
       document.body.appendChild(overlay);
     }
 
-    const currentAcc = getCurrentAccount() || '0xVoter';
+    const currentAcc = wallet.state.address || '0xVoter';
     const chosenOptName = poll.userHasVoted
       ? (poll.options.find(o => o.id === poll.userChoice)?.name || 'Community Choice')
       : 'On-Chain Voter';

@@ -15,6 +15,7 @@ import { loadMemes, renderMemeMedia } from './memes.js';
 import { fetchAllPolls, createPollCardHtml, executeCancelPoll, executeEndPollEarly, executeArchivePoll, executeUnarchivePoll } from './polls-service.js';
 import { animateNumber, hidePollForMe, showToast, shortenAddress, getIdenticonUrl, createIdenticonSvg, formatTimeLeft, guardString } from './ui.js';
 import { init3dScene } from './scene3d.js';
+import * as wallet from './wallet.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // 1. Shared Layout (Navbar, Footer, Theme, Web3 State, Route Stickers, Transitions)
@@ -38,7 +39,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('3D Scene initialization failed:', err);
   }
 
-
   // 5. Infinite Meme Marquee
   try {
     await initMemeMarquee();
@@ -46,18 +46,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Meme marquee initialization failed:', err);
   }
 
-  // 6. Hero 3D Card Fan (Render immediately with manifest data so hero is never blank)
+  // 6. Hero 3D Card Fan (Render initially with skeletons)
   try {
-    await initHeroMemeFan();
+    await initHeroMemeFan(null, null);
   } catch (err) {
     console.error('Hero meme fan initial render failed:', err);
   }
 
-  // 7. On-Chain Stats & Trending Ballots (Loads asynchronously, isolated from layout)
+  // 7. On-Chain Stats & Trending Ballots
   loadOnChainPollsAndStats();
 
   // 8. Re-load stats and cards when wallet connection changes
-  window.addEventListener('walletStateChanged', () => {
+  wallet.subscribe(() => {
     loadOnChainPollsAndStats();
   });
 
@@ -68,6 +68,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('FAQ accordion initialization failed:', err);
   }
 });
+
+window.retryHomeLoad = () => {
+  loadOnChainPollsAndStats();
+};
 
 /* --------------------------------------------------------------------------
    1. Hero 3D Card Deck (Rebuilt Minimal, Flagged & Reliable)
@@ -81,13 +85,6 @@ const DECK_FX = {
   entrance: true
 };
 
-// Flagged stubs for optional future extensions
-function applyTilt(el, e) { if (!DECK_FX.tilt) return; }
-function applyGlare(el, e) { if (!DECK_FX.glare) return; }
-function startShuffle() { if (!DECK_FX.shuffle) return; }
-function enableDrag(el) { if (!DECK_FX.drag) return; }
-function enableFloat(el) { if (!DECK_FX.float) return; }
-
 function renderBack(poll) {
   if (!poll) {
     return `
@@ -99,19 +96,38 @@ function renderBack(poll) {
     `;
   }
 
+  if (poll.isError) {
+    return `
+      <div class="card-back-error" style="text-align:center; padding:12px;">
+        <div class="card-back-tag" style="background:var(--accent-red, #EF4444); color:#FFF; display:inline-block; padding:2px 8px; border-radius:var(--radius-full); font-size:0.68rem; font-weight:800;">
+          ERROR
+        </div>
+        <h4 class="card-back-question" style="margin:12px 0 6px;">Could not load polls</h4>
+        <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:14px;">Network connection issue</p>
+        <button type="button" class="btn-primary" onclick="window.retryHomeLoad()" style="width:100%; justify-content:center;">
+          <span>Retry</span>
+        </button>
+      </div>
+    `;
+  }
+
   // Convert all values to string or number first
   const id = poll.id != null ? String(poll.id) : '';
   const title = guardString(poll.title || '—');
   const isSample = Boolean(poll.isSample);
-  const tagText = isSample ? 'SAMPLE POLL' : (poll.isEnded ? 'ENDED BALLOT' : 'ACTIVE BALLOT');
-  const tagBg = isSample ? 'var(--accent-orange)' : (poll.isEnded ? '#777' : 'var(--accent-lime)');
+  const tagText = isSample ? 'SAMPLE' : (poll.isEnded ? 'ENDED BALLOT' : 'ACTIVE BALLOT');
+  const tagBg = isSample ? '#FFA500' : (poll.isEnded ? '#777' : 'var(--accent-lime)');
   const tagColor = '#0A0A0A';
 
   const creator = poll.creator ? shortenAddress(String(poll.creator)) : '—';
   const creatorAvatar = poll.creator ? getIdenticonUrl(String(poll.creator), 20) : '';
   const totalVotes = poll.totalVotes != null ? Number(poll.totalVotes) : 0;
   const timeLeft = poll.timeLeft ? String(poll.timeLeft) : (poll.endTime ? formatTimeLeft(poll.endTime, poll.isCancelled) : '—');
-  const pollLink = poll.link ? String(poll.link) : (id ? `poll.html?id=${id}` : 'polls.html');
+  const pollLink = isSample
+    ? (poll.link || 'create.html')
+    : (id ? `poll.html?id=${id}` : 'polls.html');
+
+  const actionBtnText = isSample ? 'Create this poll' : 'Vote now';
 
   return `
     <div>
@@ -138,7 +154,7 @@ function renderBack(poll) {
 
     <div class="card-back-actions">
       <a href="${pollLink}" class="btn-primary" style="width:100%; justify-content:center;">
-        <span>Vote Now</span>
+        <span>${actionBtnText}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="5" y1="12" x2="19" y2="12"></line>
           <polyline points="12 5 19 12 12 19"></polyline>
@@ -151,7 +167,7 @@ function renderBack(poll) {
   `;
 }
 
-async function initHeroMemeFan(polls = null) {
+async function initHeroMemeFan(polls = null, loadError = null) {
   const container = document.getElementById('heroFanContainer');
   if (!container) return;
 
@@ -160,16 +176,6 @@ async function initHeroMemeFan(polls = null) {
   const centerMeme = memes.find(m => m.type === 'video') || memes[3] || memes[0];
   const rightMeme = memes[1] || memes[2] || { id: 'meme-02', caption: 'Watching results nervously?', color: '#FFB800', tag: 'HOT TAKES' };
 
-  // Query live active polls vs ended polls
-  const now = Math.floor(Date.now() / 1000);
-  const activePolls = Array.isArray(polls)
-    ? polls.filter(p => !p.isCancelled && !p.archived && Number(p.endTime) > now)
-    : [];
-  const endedPolls = Array.isArray(polls)
-    ? polls.filter(p => !p.archived && (Number(p.endTime) <= now || p.isCancelled))
-    : [];
-
-  // 3 Distinct Sample Polls for fallback
   const samplePolls = [
     {
       title: 'Should Doge be the official gas currency of Ethereum Sepolia?',
@@ -197,26 +203,40 @@ async function initHeroMemeFan(polls = null) {
     }
   ];
 
-  // Map 3 distinct items
   const pollSlots = [];
-  const pollPool = [...activePolls, ...endedPolls];
 
-  for (let i = 0; i < 3; i++) {
-    if (pollPool[i]) {
-      const p = pollPool[i];
-      pollSlots.push({
-        id: p.id,
-        title: p.title,
-        creator: p.creator,
-        timeLeft: formatTimeLeft(p.endTime, p.isCancelled),
-        totalVotes: p.totalVotes || 0,
-        isEnded: Number(p.endTime) <= now || p.isCancelled,
-        isSample: false,
-        link: `poll.html?id=${p.id}`
-      });
-    } else {
-      pollSlots.push(samplePolls[i]);
+  if (loadError) {
+    // If polls failed to load, do NOT silently fallback to samples
+    for (let i = 0; i < 3; i++) {
+      pollSlots.push({ isError: true, error: loadError });
     }
+  } else if (Array.isArray(polls)) {
+    const now = Math.floor(Date.now() / 1000);
+    const activePolls = polls.filter(p => !p.isCancelled && !p.archived && Number(p.endTime) > now);
+    const endedPolls = polls.filter(p => !p.archived && (Number(p.endTime) <= now || p.isCancelled));
+    const pollPool = [...activePolls, ...endedPolls];
+
+    for (let i = 0; i < 3; i++) {
+      if (pollPool[i]) {
+        const p = pollPool[i];
+        pollSlots.push({
+          id: p.id,
+          title: p.title,
+          creator: p.creator,
+          timeLeft: formatTimeLeft(p.endTime, p.isCancelled),
+          totalVotes: p.totalVotes || 0,
+          isEnded: Number(p.endTime) <= now || p.isCancelled,
+          isSample: false,
+          link: `poll.html?id=${p.id}`
+        });
+      } else {
+        // If contract is genuinely empty or has fewer than 3 polls, use labeled sample
+        pollSlots.push(samplePolls[i]);
+      }
+    }
+  } else {
+    // Initial loading state
+    pollSlots.push(null, null, null);
   }
 
   // Cards Data: Left is slot 0, Center is slot 1, Right is slot 2
@@ -416,7 +436,7 @@ async function loadOnChainPollsAndStats() {
 
     // Refresh hero fan cards with live active poll links
     try {
-      await initHeroMemeFan(polls);
+      await initHeroMemeFan(polls, null);
     } catch (err) {
       console.error('Updating hero fan with live poll targets failed:', err);
     }
@@ -441,6 +461,13 @@ async function loadOnChainPollsAndStats() {
     }
   } catch (err) {
     console.error('Failed to load on-chain polls:', err);
+
+    // Hero cards: show error with retry, not silent fallback to samples
+    try {
+      await initHeroMemeFan(null, err);
+    } catch (heroErr) {
+      console.error('Error updating hero cards to error state:', heroErr);
+    }
 
     if (statPollsEl) statPollsEl.classList.remove('skeleton-loader');
     if (statVotesEl) statVotesEl.classList.remove('skeleton-loader');
@@ -470,12 +497,12 @@ async function loadOnChainPollsAndStats() {
 
     if (gridContainer) {
       gridContainer.innerHTML = `
-        <div class="empty-state" style="grid-column: 1 / -1;">
-          <img src="assets/stickers/smiley.svg" alt="Smiley" class="empty-state-sticker" />
-          <h3 class="empty-state-title">Could Not Load Trending Ballots</h3>
-          <p class="empty-state-desc">The Sepolia network connection is currently busy. You can retry or deploy a new poll.</p>
+        <div class="empty-state error-state" style="grid-column: 1 / -1;">
+          <img src="assets/stickers/squiggle.svg" alt="Error" class="empty-state-sticker" />
+          <h3 class="empty-state-title">Could not load data from the network</h3>
+          <p class="empty-state-desc">${escapeHtml(err.message || 'Sepolia network did not respond')}</p>
           <div style="display:flex; gap:12px; justify-content:center; margin-top:16px;">
-            <button type="button" class="btn-primary" onclick="window.location.reload()">Retry Connection</button>
+            <button type="button" class="btn-primary" onclick="window.retryHomeLoad()">Retry</button>
             <a href="create.html" class="btn-secondary">Create a Poll</a>
           </div>
         </div>

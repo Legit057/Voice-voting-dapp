@@ -1,149 +1,251 @@
 /**
  * MULTIPOLL • js/web3.js
- * Read & Write Providers, Wallet Persistence, Sepolia Switcher, Event Queries, Telemetry
+ * Unified Resilient Read & Write Layer
+ * Shared Read Provider with automatic failover, static network, batchMaxCount: 1, and wallet write integration
  */
 
-import { CONTRACT_ADDRESS, CONTRACT_ABI, VERIFIED, READ_RPC_URLS } from '../contract-config.js';
-import { showToast, parseContractError } from './ui.js';
+import { CONTRACT_ADDRESS, CONTRACT_ABI, VERIFIED, READ_RPC_URLS, DEPLOY_BLOCK } from '../contract-config.js';
+import { SEPOLIA_CHAIN_ID_DEC, SEPOLIA_CHAIN_ID_HEX } from './web3-constants.js';
+import * as wallet from './wallet.js';
 
-export const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7';
-export const SEPOLIA_CHAIN_ID_DEC = 11155111;
-export const CONTRACT_DEPLOY_BLOCK = 12141000;
+export { SEPOLIA_CHAIN_ID_DEC, SEPOLIA_CHAIN_ID_HEX };
+export const CONTRACT_DEPLOY_BLOCK = typeof DEPLOY_BLOCK === 'number' ? DEPLOY_BLOCK : 12141068;
 
-// Default Sepolia endpoints fallback list
-const FALLBACK_RPC_URLS = [
+// Fallback list if config is missing or empty
+const DEFAULT_RPC_URLS = [
   'https://ethereum-sepolia-rpc.publicnode.com',
-  'https://rpc.sepolia.org',
-  'https://rpc2.sepolia.org'
+  'https://sepolia.gateway.tenderly.co',
+  'https://gateway.tenderly.co/public/sepolia'
 ];
 
-let publicProvider = null;
-let currentAccount = null;
-let currentChainId = null;
+// Cleaned endpoints: filter out placeholders, invalid URLs, or duplicates
+export const validRpcUrls = (() => {
+  const list = Array.isArray(READ_RPC_URLS) && READ_RPC_URLS.length > 0 ? READ_RPC_URLS : DEFAULT_RPC_URLS;
+  const cleaned = [];
+  for (const u of list) {
+    if (!u || typeof u !== 'string') continue;
+    if (u.includes('YOUR_API_KEY') || u.includes('<key>') || u.includes('undefined')) continue;
+    if (!u.startsWith('http://') && !u.startsWith('https://')) continue;
+    if (!cleaned.includes(u)) cleaned.push(u);
+  }
+  return cleaned.length > 0 ? cleaned : DEFAULT_RPC_URLS;
+})();
 
-const WALLET_CONNECTED_KEY = 'multipoll_wallet_connected';
+let activeRpcIndex = 0;
+let activeProvider = null;
+let initPromise = null;
 
-/* --------------------------------------------------------------------------
-   1. Read Provider & Read Contract (Zero Wallet Required)
-   -------------------------------------------------------------------------- */
-export function getReadProvider() {
-  if (publicProvider) return publicProvider;
+// Telemetry & Diagnostic state shared with debug.js
+export const diagnosticReport = {
+  activeEndpoint: validRpcUrls[0],
+  startupChecks: {
+    chainId: { pass: false, val: null, ms: 0 },
+    block: { pass: false, val: null, ms: 0 },
+    getCode: { pass: false, val: null, ms: 0 },
+    getPollCount: { pass: false, val: null, ms: 0 },
+    getPolls: { pass: false, val: null, ms: 0 }
+  },
+  failingChecks: [],
+  overallPass: false
+};
 
+function createEndpointProvider(url, timeoutMs = 5000) {
   const ethers = window.ethers;
-  if (!ethers) {
-    console.error('Ethers.js library not loaded from CDN.');
-    return null;
-  }
-
-  const endpoints = (Array.isArray(READ_RPC_URLS) && READ_RPC_URLS.length > 0)
-    ? READ_RPC_URLS
-    : FALLBACK_RPC_URLS;
-
-  try {
-    if (ethers.FallbackProvider && endpoints.length > 1) {
-      const network = { name: 'sepolia', chainId: SEPOLIA_CHAIN_ID_DEC };
-      const configs = endpoints.map((url, idx) => ({
-        provider: new ethers.JsonRpcProvider(url, network, { staticNetwork: true }),
-        priority: idx + 1,
-        weight: 1,
-        stallTimeout: 2500
-      }));
-      publicProvider = new ethers.FallbackProvider(configs, 1);
-    } else {
-      publicProvider = new ethers.JsonRpcProvider(endpoints[0], {
-        name: 'sepolia',
-        chainId: SEPOLIA_CHAIN_ID_DEC
-      }, { staticNetwork: true });
-    }
-  } catch (err) {
-    console.warn('FallbackProvider error, using single JsonRpcProvider:', err);
-    publicProvider = new ethers.JsonRpcProvider(endpoints[0], {
-      name: 'sepolia',
-      chainId: SEPOLIA_CHAIN_ID_DEC
-    }, { staticNetwork: true });
-  }
-
-  return publicProvider;
+  if (!ethers) return null;
+  const req = new ethers.FetchRequest(url);
+  req.timeout = timeoutMs;
+  return new ethers.JsonRpcProvider(
+    req,
+    { name: 'sepolia', chainId: SEPOLIA_CHAIN_ID_DEC },
+    { staticNetwork: true, batchMaxCount: 1 }
+  );
 }
 
+/**
+ * Health check on an endpoint
+ */
+async function checkEndpointHealth(provider) {
+  const result = { chainId: false, block: 0, code: false };
+  try {
+    const [net, blk, code] = await Promise.all([
+      provider.getNetwork(),
+      provider.getBlockNumber(),
+      provider.getCode(CONTRACT_ADDRESS)
+    ]);
+    result.chainId = Number(net.chainId) === SEPOLIA_CHAIN_ID_DEC;
+    result.block = blk;
+    result.code = Boolean(code && code !== '0x');
+    return result;
+  } catch (err) {
+    return result;
+  }
+}
+
+/**
+ * Performs startup health check across READ_RPC_URLS in order.
+ * Picks the first healthy endpoint.
+ */
+export async function initReadProvider() {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    const ethers = window.ethers;
+    if (!ethers) {
+      console.error('ethers.js not loaded in window');
+      return null;
+    }
+
+    let chosenProvider = null;
+
+    for (let i = 0; i < validRpcUrls.length; i++) {
+      const url = validRpcUrls[i];
+      const p = createEndpointProvider(url, 5000);
+      if (!p) continue;
+
+      const t0 = Date.now();
+      const health = await checkEndpointHealth(p);
+      const elapsed = Date.now() - t0;
+
+      if (health.chainId && health.block > 0 && health.code) {
+        activeRpcIndex = i;
+        chosenProvider = p;
+        activeProvider = p;
+        diagnosticReport.activeEndpoint = url;
+        diagnosticReport.startupChecks.chainId = { pass: true, val: 11155111, ms: elapsed };
+        diagnosticReport.startupChecks.block = { pass: true, val: health.block, ms: elapsed };
+        diagnosticReport.startupChecks.getCode = { pass: true, val: 'ok', ms: elapsed };
+        break;
+      } else {
+        console.warn(`RPC endpoint ${url} failed health check:`, health);
+      }
+    }
+
+    // If none passed, default to first candidate
+    if (!chosenProvider) {
+      console.warn('All RPC endpoints failed strict health check. Falling back to primary endpoint.');
+      activeRpcIndex = 0;
+      chosenProvider = createEndpointProvider(validRpcUrls[0], 6000);
+      activeProvider = chosenProvider;
+      diagnosticReport.activeEndpoint = validRpcUrls[0];
+    }
+
+    // Run contract startup checks (getPollCount and getPolls)
+    try {
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, activeProvider);
+      const t0 = Date.now();
+      const count = await contract.getPollCount();
+      diagnosticReport.startupChecks.getPollCount = { pass: true, val: Number(count), ms: Date.now() - t0 };
+
+      const t1 = Date.now();
+      const sample = await contract.getPolls(0, Math.min(Number(count), 5));
+      diagnosticReport.startupChecks.getPolls = { pass: true, val: sample.length, ms: Date.now() - t1 };
+      diagnosticReport.overallPass = true;
+    } catch (err) {
+      console.warn('Contract startup check error:', err);
+      diagnosticReport.failingChecks.push(err.message || 'Contract read error');
+    }
+
+    return activeProvider;
+  })();
+
+  return initPromise;
+}
+
+/**
+ * Returns the single shared read provider
+ */
+export function getReadProvider() {
+  if (activeProvider) return activeProvider;
+  const ethers = window.ethers;
+  if (!ethers) return null;
+
+  activeProvider = createEndpointProvider(validRpcUrls[activeRpcIndex], 5000);
+  diagnosticReport.activeEndpoint = validRpcUrls[activeRpcIndex];
+  initReadProvider().catch(() => {});
+  return activeProvider;
+}
+
+/**
+ * Executes a read call with retry and endpoint failover.
+ * If all RPC endpoints fail, falls back to the user's wallet provider if connected to Sepolia.
+ */
+export async function withReadRetry(callFn) {
+  await (initPromise || initReadProvider());
+
+  let lastError = null;
+  const startIndex = activeRpcIndex;
+
+  // 1. Try active endpoint, retry once
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await callFn(activeProvider);
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  // 2. Rotate to other configured endpoints
+  for (let i = 0; i < validRpcUrls.length; i++) {
+    const nextIdx = (startIndex + 1 + i) % validRpcUrls.length;
+    if (nextIdx === activeRpcIndex) continue;
+
+    const nextUrl = validRpcUrls[nextIdx];
+    const candidate = createEndpointProvider(nextUrl, 5000);
+    if (!candidate) continue;
+
+    try {
+      const res = await callFn(candidate);
+      // Succeeded! Switch activeProvider to this healthy endpoint
+      activeRpcIndex = nextIdx;
+      activeProvider = candidate;
+      diagnosticReport.activeEndpoint = nextUrl;
+      return res;
+    } catch (candErr) {
+      lastError = candErr;
+    }
+  }
+
+  // 3. Last fallback: connected wallet on Sepolia
+  if (wallet.state.status === 'connected' && wallet.state.chainId === SEPOLIA_CHAIN_ID_DEC) {
+    const walletBrowserProvider = wallet.getWalletBrowserProvider();
+    if (walletBrowserProvider) {
+      try {
+        console.info('Using connected wallet as final read fallback');
+        return await callFn(walletBrowserProvider);
+      } catch (walletErr) {
+        lastError = walletErr;
+      }
+    }
+  }
+
+  throw lastError || new Error('All read providers failed.');
+}
+
+/**
+ * Returns a Contract instance bound to the shared read provider
+ */
 export function getReadContract() {
   const provider = getReadProvider();
   if (!provider || !window.ethers) return null;
   return new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }
 
-/* --------------------------------------------------------------------------
-   2. Write Provider & Wallet Connection
-   -------------------------------------------------------------------------- */
-export function getBrowserProvider() {
-  if (typeof window.ethereum !== 'undefined' && window.ethers) {
-    return new window.ethers.BrowserProvider(window.ethereum);
-  }
-  return null;
-}
-
-export async function getSigner() {
-  const provider = getBrowserProvider();
-  if (!provider) {
-    throw new Error('MetaMask or Web3 wallet is not installed.');
-  }
-  return await provider.getSigner();
-}
-
+/**
+ * Returns a Contract instance bound to the active wallet signer for write calls
+ */
 export async function getWriteContract() {
-  const signer = await getSigner();
+  const signer = await wallet.getSigner();
   return new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 }
 
-export function getCurrentAccount() {
-  return currentAccount;
-}
-
-export function isWalletConnected() {
-  return Boolean(currentAccount);
-}
-
-export async function connectWallet() {
-  if (typeof window.ethereum === 'undefined') {
-    showToast('MetaMask is not installed. Please install MetaMask to interact with the blockchain.', 'error');
-    window.open('https://metamask.io/download/', '_blank');
-    return null;
-  }
-
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts || accounts.length === 0) {
-      throw new Error('No accounts authorized.');
-    }
-
-    currentAccount = accounts[0];
-    localStorage.setItem(WALLET_CONNECTED_KEY, 'true');
-
-    // Check network
-    await checkAndSwitchNetwork();
-
-    dispatchWalletEvent();
-    showToast(`Connected: ${currentAccount.slice(0, 6)}...${currentAccount.slice(-4)}`, 'success');
-    return currentAccount;
-  } catch (err) {
-    console.error('Wallet connection error:', err);
-    showToast(parseContractError(err), 'error');
-    return null;
-  }
-}
-
-export function disconnectWallet() {
-  currentAccount = null;
-  localStorage.removeItem(WALLET_CONNECTED_KEY);
-  dispatchWalletEvent();
-  showToast('Wallet disconnected.', 'info');
-}
-
+/**
+ * Fetches account balance via read provider
+ */
 export async function getAccountBalance(address) {
   if (!address || !window.ethers) return '0.000';
   try {
-    const provider = getReadProvider();
-    const balance = await provider.getBalance(address);
+    const balance = await withReadRetry((p) => p.getBalance(address));
     const eth = window.ethers.formatEther(balance);
     return Number(eth).toFixed(3);
   } catch (err) {
@@ -152,197 +254,130 @@ export async function getAccountBalance(address) {
   }
 }
 
-/* --------------------------------------------------------------------------
-   3. Network Checker & Switcher
-   -------------------------------------------------------------------------- */
-export async function checkAndSwitchNetwork() {
-  if (typeof window.ethereum === 'undefined') return true;
-
-  try {
-    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-    currentChainId = chainId;
-
-    if (chainId.toLowerCase() !== SEPOLIA_CHAIN_ID_HEX) {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }]
-        });
-        currentChainId = SEPOLIA_CHAIN_ID_HEX;
-        return true;
-      } catch (switchError) {
-        if (switchError.code === 4902) {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: SEPOLIA_CHAIN_ID_HEX,
-                chainName: 'Ethereum Sepolia',
-                nativeCurrency: { name: 'Sepolia ETH', symbol: 'SEP', decimals: 18 },
-                rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
-                blockExplorerUrls: ['https://sepolia.etherscan.io']
-              }
-            ]
-          });
-          currentChainId = SEPOLIA_CHAIN_ID_HEX;
-          return true;
-        }
-        throw switchError;
-      }
-    }
-    return true;
-  } catch (err) {
-    console.warn('Failed to switch network:', err);
-    showToast('Please switch MetaMask to Ethereum Sepolia network.', 'error');
-    return false;
-  }
-}
-
-export async function isCorrectNetwork() {
-  if (typeof window.ethereum === 'undefined') return true;
-  try {
-    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-    return chainId.toLowerCase() === SEPOLIA_CHAIN_ID_HEX;
-  } catch {
-    return true;
-  }
-}
-
-/* --------------------------------------------------------------------------
-   4. Auto-Reconnect & Event Listeners
-   -------------------------------------------------------------------------- */
-export async function initWeb3() {
-  if (typeof window.ethereum !== 'undefined') {
-    const wasConnected = localStorage.getItem(WALLET_CONNECTED_KEY) === 'true';
-    if (wasConnected) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts && accounts.length > 0) {
-          currentAccount = accounts[0];
-          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-          currentChainId = chainId;
-        } else {
-          localStorage.removeItem(WALLET_CONNECTED_KEY);
-        }
-      } catch (err) {
-        console.warn('Silent reconnect failed:', err);
-      }
-    }
-
-    window.ethereum.on('accountsChanged', (accounts) => {
-      if (!accounts || accounts.length === 0) {
-        disconnectWallet();
-      } else {
-        currentAccount = accounts[0];
-        localStorage.setItem(WALLET_CONNECTED_KEY, 'true');
-        dispatchWalletEvent();
-        showToast(`Active Account: ${currentAccount.slice(0, 6)}...${currentAccount.slice(-4)}`, 'info');
-      }
-    });
-
-    window.ethereum.on('chainChanged', (chainId) => {
-      currentChainId = chainId;
-      window.location.reload();
-    });
-  }
-
-  dispatchWalletEvent();
-}
-
-function dispatchWalletEvent() {
-  window.dispatchEvent(
-    new CustomEvent('walletStateChanged', {
-      detail: {
-        account: currentAccount,
-        connected: Boolean(currentAccount),
-        chainId: currentChainId
-      }
-    })
-  );
-}
-
-/* --------------------------------------------------------------------------
-   5. Network Status Telemetry (Block Number + Gas Price in Gwei)
-   -------------------------------------------------------------------------- */
+/**
+ * Network Status Telemetry for Footer
+ */
 export async function getNetworkStatus() {
+  const result = {
+    reachable: false,
+    blockNumber: 0,
+    gasPriceGwei: '0.10',
+    contractAddress: CONTRACT_ADDRESS,
+    isVerified: Boolean(VERIFIED),
+    statusText: 'Degraded',
+    failingCheck: null,
+    gasIsHigh: false
+  };
+
   try {
     const provider = getReadProvider();
-    if (!provider) return { reachable: false, blockNumber: 0, gasPriceGwei: '0.10' };
+    if (!provider) return result;
 
     const [blockNumber, feeData] = await Promise.all([
-      provider.getBlockNumber(),
-      provider.getFeeData().catch(() => null)
+      withReadRetry((p) => p.getBlockNumber()).catch(() => 0),
+      withReadRetry((p) => p.getFeeData()).catch(() => null)
     ]);
 
-    const contract = getReadContract();
-    let reachable = false;
+    result.blockNumber = blockNumber;
 
-    if (contract) {
-      try {
-        await contract.getPollCount();
-        reachable = true;
-      } catch (e) {
-        console.warn('Contract ping failed:', e);
-      }
+    let getCodePass = false;
+    let getPollCountPass = false;
+
+    try {
+      const code = await withReadRetry((p) => p.getCode(CONTRACT_ADDRESS));
+      getCodePass = Boolean(code && code !== '0x');
+    } catch (e) {
+      result.failingCheck = 'Contract bytecode read failed';
     }
 
-    let gasPriceGwei = '0.10';
+    try {
+      const contract = getReadContract();
+      if (contract) {
+        await withReadRetry((p) => {
+          const c = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+          return c.getPollCount();
+        });
+        getPollCountPass = true;
+      }
+    } catch (e) {
+      if (!result.failingCheck) result.failingCheck = 'getPollCount failed';
+    }
+
+    // Format gas price
     if (feeData && feeData.gasPrice && window.ethers) {
       const gweiVal = Number(window.ethers.formatUnits(feeData.gasPrice, 'gwei'));
       if (gweiVal < 0.01) {
-        gasPriceGwei = '< 0.01';
+        result.gasPriceGwei = '< 0.01';
       } else {
-        gasPriceGwei = gweiVal.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+        result.gasPriceGwei = gweiVal.toFixed(2);
+      }
+      if (gweiVal > 100) {
+        result.gasIsHigh = true;
       }
     }
 
-    return {
-      reachable,
-      blockNumber,
-      gasPriceGwei,
-      contractAddress: CONTRACT_ADDRESS,
-      isVerified: Boolean(VERIFIED)
-    };
+    // Operational only when block, code, and getPollCount pass
+    if (blockNumber > 0 && getCodePass && getPollCountPass) {
+      result.reachable = true;
+      result.statusText = 'Operational';
+      result.failingCheck = null;
+    } else {
+      result.reachable = false;
+      result.statusText = 'Degraded';
+      if (!result.failingCheck) {
+        result.failingCheck = !getCodePass ? 'Contract unreachable' : 'Block fetch failed';
+      }
+    }
+
+    return result;
   } catch (err) {
-    console.warn('Network telemetry error:', err);
-    return {
-      reachable: false,
-      blockNumber: 0,
-      gasPriceGwei: '0.10',
-      contractAddress: CONTRACT_ADDRESS,
-      isVerified: Boolean(VERIFIED)
-    };
+    result.reachable = false;
+    result.statusText = 'Degraded';
+    result.failingCheck = err.message || 'Connection error';
+    return result;
   }
 }
 
-/* --------------------------------------------------------------------------
-   6. Safe Paginated Event Log Queries
-   -------------------------------------------------------------------------- */
-export async function queryContractEvents(filter, startBlock = CONTRACT_DEPLOY_BLOCK, endBlock = null, chunkSize = 3500) {
-  const contract = getReadContract();
+/**
+ * Safe Paginated Event Log Queries in Chunks <= 2000 blocks starting from DEPLOY_BLOCK
+ */
+export async function queryContractEvents(filter, startBlock = CONTRACT_DEPLOY_BLOCK, endBlock = null, chunkSize = 1500) {
+  const safeChunkSize = Math.min(chunkSize, 2000);
   const provider = getReadProvider();
-  if (!contract || !provider) return [];
+  if (!provider) return [];
 
   try {
-    const latestBlock = endBlock !== null ? endBlock : await provider.getBlockNumber();
+    const latestBlock = endBlock !== null ? endBlock : await withReadRetry((p) => p.getBlockNumber());
     const from = Math.max(startBlock, CONTRACT_DEPLOY_BLOCK);
 
-    // If within single chunk range, direct query
-    if (latestBlock - from <= chunkSize) {
-      return await contract.queryFilter(filter, from, latestBlock);
-    }
+    if (from > latestBlock) return [];
 
-    // Chunked pagination
     const allEvents = [];
-    for (let b = from; b <= latestBlock; b += chunkSize) {
-      const chunkEnd = Math.min(b + chunkSize - 1, latestBlock);
-      try {
-        const events = await contract.queryFilter(filter, b, chunkEnd);
-        allEvents.push(...events);
-      } catch (chunkErr) {
-        console.warn(`Chunk ${b}-${chunkEnd} error:`, chunkErr);
+
+    for (let b = from; b <= latestBlock; b += safeChunkSize) {
+      const chunkEnd = Math.min(b + safeChunkSize - 1, latestBlock);
+
+      // Attempt chunk query with retry
+      let chunkEvents = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          chunkEvents = await withReadRetry((p) => {
+            const c = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+            return c.queryFilter(filter, b, chunkEnd);
+          });
+          break;
+        } catch (err) {
+          if (attempt === 1) {
+            console.warn(`Query logs chunk ${b}-${chunkEnd} failed after retry:`, err);
+          }
+        }
+      }
+
+      if (Array.isArray(chunkEvents)) {
+        allEvents.push(...chunkEvents);
       }
     }
+
     return allEvents;
   } catch (err) {
     console.error('Error querying events paginated:', err);
@@ -350,11 +385,14 @@ export async function queryContractEvents(filter, startBlock = CONTRACT_DEPLOY_B
   }
 }
 
-/* --------------------------------------------------------------------------
-   7. Transaction Receipt & Verification
-   -------------------------------------------------------------------------- */
+/**
+ * Transaction Receipt lookup with retry
+ */
 export async function getTransactionReceipt(txHash) {
-  const provider = getReadProvider();
-  if (!provider) return null;
-  return await provider.getTransactionReceipt(txHash);
+  try {
+    return await withReadRetry((p) => p.getTransactionReceipt(txHash));
+  } catch (err) {
+    console.error('getTransactionReceipt error:', err);
+    return null;
+  }
 }

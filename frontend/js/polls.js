@@ -1,6 +1,7 @@
 /**
  * MULTIPOLL • js/polls.js
  * Browse All Polls Page: Filtering, Searching, Sorting, Show Archived Toggle, Dashed Create Card
+ * Unified resilient states: Loading Skeleton, Error State with Retry, Empty State
  */
 
 import { injectLayout } from './layout.js';
@@ -12,6 +13,7 @@ import {
   executeArchivePoll,
   executeUnarchivePoll
 } from './polls-service.js';
+import * as wallet from './wallet.js';
 import { isPollHidden, hidePollForMe, showToast } from './ui.js';
 
 let allPollsCache = [];
@@ -19,21 +21,23 @@ let currentTab = 'all'; // 'all' | 'active' | 'ended'
 let currentSearch = '';
 let currentSort = 'newest'; // 'newest' | 'oldest' | 'votes' | 'ending-soon'
 let showArchived = false;
+let fetchError = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   try { injectLayout(); } catch (err) { console.error('injectLayout failed in polls.js:', err); }
   try { setupGlobalCardActionHandler(); } catch (err) { console.error('setupGlobalCardActionHandler failed:', err); }
   try { bindToolbarEvents(); } catch (err) { console.error('bindToolbarEvents failed:', err); }
-  try { await loadAndRenderPolls(); } catch (err) { console.error('loadAndRenderPolls failed:', err); }
 
-  // Re-render when wallet state changes
-  window.addEventListener('walletStateChanged', () => {
-    try { applyFilterAndRender(); } catch (err) { console.error('applyFilterAndRender failed:', err); }
+  // Initial load
+  await loadAndRenderPolls();
+
+  // Re-render when wallet state changes (e.g. to update user vote highlights)
+  wallet.subscribe(() => {
+    try { applyFilterAndRender(); } catch (err) { console.error('applyFilterAndRender failed on wallet change:', err); }
   });
 });
 
 function bindToolbarEvents() {
-  // Tab buttons
   const tabBtns = document.querySelectorAll('.filter-tab-btn');
   tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -44,7 +48,6 @@ function bindToolbarEvents() {
     });
   });
 
-  // Search input
   const searchInput = document.getElementById('pollsSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -53,7 +56,6 @@ function bindToolbarEvents() {
     });
   }
 
-  // Sort dropdown
   const sortSelect = document.getElementById('pollsSortSelect');
   if (sortSelect) {
     sortSelect.addEventListener('change', (e) => {
@@ -62,7 +64,6 @@ function bindToolbarEvents() {
     });
   }
 
-  // Show archived toggle checkbox
   const archivedToggle = document.getElementById('showArchivedCheckbox');
   if (archivedToggle) {
     archivedToggle.addEventListener('change', (e) => {
@@ -76,10 +77,16 @@ async function loadAndRenderPolls() {
   const gridContainer = document.getElementById('pollsGrid');
   if (!gridContainer) return;
 
-  // Show Skeleton Loaders while fetching
   renderSkeletons(gridContainer, 6);
 
-  allPollsCache = await fetchAllPolls();
+  try {
+    allPollsCache = await fetchAllPolls();
+    fetchError = null;
+  } catch (err) {
+    console.error('loadAndRenderPolls error:', err);
+    fetchError = err;
+  }
+
   applyFilterAndRender();
 }
 
@@ -87,24 +94,41 @@ function applyFilterAndRender() {
   const gridContainer = document.getElementById('pollsGrid');
   if (!gridContainer) return;
 
+  // 1. Error state
+  if (fetchError) {
+    gridContainer.innerHTML = `
+      <div class="empty-state error-state" style="grid-column: 1 / -1;">
+        <img src="assets/stickers/squiggle.svg" alt="Error" class="empty-state-sticker" />
+        <h3 class="empty-state-title">Could not load data from the network</h3>
+        <p class="empty-state-desc">${escapeHtml(fetchError.message || 'Sepolia RPC node did not respond')}</p>
+        <button type="button" class="btn-primary btn-retry" id="pollsRetryBtn">
+          <span>Retry</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = document.getElementById('pollsRetryBtn');
+    if (retryBtn) retryBtn.onclick = () => loadAndRenderPolls();
+    return;
+  }
+
   const now = Math.floor(Date.now() / 1000);
 
-  // 1. Filter out user-hidden polls (from "Hide for me")
+  // 2. Filter out user-hidden polls
   let list = allPollsCache.filter(p => !isPollHidden(p.id));
 
-  // 2. Filter by Archived state
+  // 3. Filter by Archived state
   if (!showArchived) {
     list = list.filter(p => !p.archived);
   }
 
-  // 3. Filter by Tab (all, active, ended)
+  // 4. Filter by Tab
   if (currentTab === 'active') {
     list = list.filter(p => !p.isCancelled && p.endTime > now && !p.archived);
   } else if (currentTab === 'ended') {
     list = list.filter(p => p.isCancelled || p.endTime <= now);
   }
 
-  // 4. Search Filter
+  // 5. Search Filter
   if (currentSearch) {
     list = list.filter(p =>
       p.title.toLowerCase().includes(currentSearch) ||
@@ -113,7 +137,7 @@ function applyFilterAndRender() {
     );
   }
 
-  // 5. Sort
+  // 6. Sort
   list.sort((a, b) => {
     if (currentSort === 'newest') return b.id - a.id;
     if (currentSort === 'oldest') return a.id - b.id;
@@ -145,6 +169,7 @@ function applyFilterAndRender() {
     </div>
   `;
 
+  // 7. Empty state only when read succeeded and zero polls match
   if (list.length === 0) {
     gridContainer.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
@@ -205,4 +230,14 @@ function setupGlobalCardActionHandler() {
       applyFilterAndRender();
     }
   };
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

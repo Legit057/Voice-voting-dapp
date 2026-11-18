@@ -4,17 +4,23 @@
  */
 
 import { injectLayout } from './layout.js';
-import { getWriteContract, getCurrentAccount, isWalletConnected, connectWallet, checkAndSwitchNetwork } from './web3.js';
+import { getWriteContract } from './web3.js';
+import * as wallet from './wallet.js';
 import { showToast, parseContractError, createIdenticonSvg, escapeHtml } from './ui.js';
 
 let durationMinutes = 1440; // Default 24 hours
 let isBlind = false;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   try { injectLayout(); } catch (e) { console.error('injectLayout failed in create.js:', e); }
   try { initCreateForm(); } catch (e) { console.error('initCreateForm failed:', e); }
   try { initTemplatePresets(); } catch (e) { console.error('initTemplatePresets failed:', e); }
   try { updateLivePreview(); } catch (e) { console.error('updateLivePreview failed:', e); }
+
+  await wallet.ready;
+  wallet.subscribe(() => {
+    updateLivePreview();
+  });
 });
 
 function initCreateForm() {
@@ -290,7 +296,7 @@ function updateLivePreview() {
     previewBadgeBlind.style.display = isBlind ? 'inline-flex' : 'none';
   }
 
-  const userAddr = getCurrentAccount() || '0xYourWalletAddressHere';
+  const userAddr = wallet.state.address || '0xYourWalletAddressHere';
   if (previewCreatorAddr) {
     previewCreatorAddr.textContent = userAddr.length > 10 ? `${userAddr.slice(0, 6)}...${userAddr.slice(-4)}` : userAddr;
   }
@@ -346,13 +352,23 @@ async function handleFormSubmit() {
     return;
   }
 
-  if (!isWalletConnected()) {
-    const connected = await connectWallet();
-    if (!connected) return;
+  if (wallet.state.status !== 'connected') {
+    try {
+      await wallet.connect();
+    } catch (err) {
+      showToast(err.message || 'Please connect your wallet first.', 'error');
+      return;
+    }
   }
 
-  const isNetworkOk = await checkAndSwitchNetwork();
-  if (!isNetworkOk) return;
+  if (wallet.state.status === 'wrong_network') {
+    try {
+      await wallet.switchToSepolia();
+    } catch (err) {
+      showToast('Please switch to Ethereum Sepolia to create a poll.', 'error');
+      return;
+    }
+  }
 
   try {
     if (submitBtn) {

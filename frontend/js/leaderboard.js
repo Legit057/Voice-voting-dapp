@@ -1,22 +1,26 @@
 /**
  * MULTIPOLL • js/leaderboard.js
  * Leaderboard & XP Page: Top Voters, Top Creators, User XP Progress Card
+ * Subscribes to single source of truth wallet.js
  */
 
 import { injectLayout } from './layout.js';
 import { fetchLeaderboardStats, getUserLevelInfo } from './xp-service.js';
-import { getCurrentAccount } from './web3.js';
+import * as wallet from './wallet.js';
 import { createIdenticonSvg, shortenAddress } from './ui.js';
 
 let activeLeaderboardTab = 'voters'; // 'voters' | 'creators'
 let cachedStats = null;
+let leaderboardError = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   try { injectLayout(); } catch (e) { console.error('injectLayout failed in leaderboard.js:', e); }
   try { bindTabEvents(); } catch (e) { console.error('bindTabEvents failed:', e); }
-  try { await loadLeaderboard(); } catch (e) { console.error('loadLeaderboard failed:', e); }
 
-  window.addEventListener('walletStateChanged', () => {
+  await loadLeaderboard();
+
+  await wallet.ready;
+  wallet.subscribe(() => {
     try { updateUserXpCard(); } catch (e) { console.error('updateUserXpCard failed:', e); }
   });
 });
@@ -56,15 +60,35 @@ async function loadLeaderboard() {
     `;
   }
 
-  cachedStats = await fetchLeaderboardStats();
+  try {
+    cachedStats = await fetchLeaderboardStats();
+    leaderboardError = null;
+  } catch (err) {
+    console.error('loadLeaderboard error:', err);
+    leaderboardError = err;
+  }
+
   updateUserXpCard();
   renderTable();
 }
 
 function updateUserXpCard() {
-  const userAddr = getCurrentAccount();
+  const userAddr = wallet.state.address;
   const card = document.getElementById('userXpCard');
   if (!card) return;
+
+  if (wallet.state.status === 'pending') {
+    card.innerHTML = `
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div class="skeleton-line" style="width:44px; height:44px; border-radius:50%;"></div>
+        <div>
+          <div class="skeleton-line" style="width:160px; height:20px; margin-bottom:8px;"></div>
+          <div class="skeleton-line" style="width:220px; height:14px;"></div>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   if (!userAddr) {
     card.innerHTML = `
@@ -102,13 +126,14 @@ function updateUserXpCard() {
       </div>
 
       <!-- Level Progress Bar -->
-      <div style="flex:1; max-width:320px; min-width:200px;">
-        <div style="display:flex; justify-content:space-between; font-size:0.75rem; font-family:var(--font-mono); margin-bottom:4px; color:var(--text-muted);">
+      <div style="min-width: 200px; flex: 1; max-width: 320px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">
           <span>Level ${info.level}</span>
+          <span>${info.progressInLevel} / 100 XP</span>
           <span>Level ${info.level + 1}</span>
         </div>
-        <div style="height:10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-full); overflow:hidden;">
-          <div style="width:${info.progressInLevel}%; height:100%; background:var(--accent-lime); transition:width 0.4s ease;"></div>
+        <div class="xp-progress-bar">
+          <div class="xp-progress-fill" style="width: ${info.progressInLevel}%;"></div>
         </div>
       </div>
     </div>
@@ -116,57 +141,76 @@ function updateUserXpCard() {
 }
 
 function renderTable() {
-  const tableContainer = document.getElementById('leaderboardTableBody');
-  if (!tableContainer || !cachedStats) return;
+  const tbody = document.getElementById('leaderboardTableBody');
+  if (!tbody) return;
 
-  const list = activeLeaderboardTab === 'voters' ? cachedStats.topVoters : cachedStats.topCreators;
-
-  if (list.length === 0) {
-    tableContainer.innerHTML = `
+  if (leaderboardError) {
+    tbody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align:center; padding:48px; color:var(--text-muted);">
-          No on-chain activity recorded in this category yet.
+        <td colspan="5" style="text-align:center; padding:32px;">
+          <div style="color:var(--accent-red); margin-bottom:12px;">Could not load data from the network</div>
+          <button type="button" class="btn-primary" onclick="loadLeaderboard()">Retry</button>
         </td>
       </tr>
     `;
     return;
   }
 
-  const rowsHtml = list.map((item, idx) => {
-    const isTop3 = idx < 3;
-    const rankBadgeClass = idx === 0 ? 'rank-gold' : (idx === 1 ? 'rank-silver' : (idx === 2 ? 'rank-bronze' : 'rank-normal'));
-    const shortAddr = shortenAddress(item.address);
-    const avatar = createIdenticonSvg(item.address, 28);
+  if (!cachedStats) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align:center; padding:32px; color:var(--text-muted);">
+          Loading leaderboard...
+        </td>
+      </tr>
+    `;
+    return;
+  }
 
-    const primaryMetric = activeLeaderboardTab === 'voters'
-      ? `${item.votes} Votes`
-      : `${item.polls} Polls`;
+  const list = activeLeaderboardTab === 'voters'
+    ? cachedStats.topVoters
+    : cachedStats.topCreators;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align:center; padding:32px; color:var(--text-muted);">
+          No participants recorded on Sepolia yet.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map((user, idx) => {
+    const rank = idx + 1;
+    const rankBadge = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : 'other';
+    const avatar = createIdenticonSvg(user.address, 24);
+    const short = shortenAddress(user.address);
+    const scoreVal = activeLeaderboardTab === 'voters' ? user.votes : user.polls;
+    const scoreLabel = activeLeaderboardTab === 'voters' ? 'votes' : 'polls';
 
     return `
-      <tr class="${isTop3 ? 'top-rank-row' : ''}">
-        <td style="width: 60px;">
-          <span class="rank-badge ${rankBadgeClass}">#${idx + 1}</span>
+      <tr>
+        <td style="font-weight:700;">
+          <span class="rank-badge rank-${rankBadge}">#${rank}</span>
         </td>
         <td>
           <div style="display:flex; align-items:center; gap:10px;">
             ${avatar}
-            <a href="https://sepolia.etherscan.io/address/${item.address}" target="_blank" rel="noopener noreferrer" class="leaderboard-address-link">
-              ${shortAddr}
-            </a>
+            <span style="font-family:var(--font-mono); font-weight:600;">${short}</span>
           </div>
         </td>
         <td>
-          <span class="wallet-lvl-chip">LVL ${item.level}</span>
+          <span class="wallet-lvl-chip">LVL ${user.level}</span>
         </td>
-        <td style="font-family:var(--font-mono); font-weight:700; color:var(--text);">
-          ${primaryMetric}
+        <td style="font-weight:700; color:var(--accent-lime);">
+          ${user.xp} XP
         </td>
-        <td style="font-family:var(--font-mono); font-weight:800; color:var(--accent-lime); text-align:right;">
-          ${item.xp} XP
+        <td style="color:var(--text-muted);">
+          ${scoreVal} ${scoreLabel}
         </td>
       </tr>
     `;
   }).join('');
-
-  tableContainer.innerHTML = rowsHtml;
 }
