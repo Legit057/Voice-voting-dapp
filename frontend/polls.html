@@ -156,46 +156,86 @@
   <!-- Shared Footer (Static Fallback, Hydrated by layout.js) -->
   <footer class="footer-wrapper" role="contentinfo">
     <div class="container">
-      <div class="network-status-panel">
-        <div class="net-item">
-          <span class="status-dot" id="footerStatusDot" style="color:#00D26A;"></span>
-          <span class="net-label">Network:</span>
-          <span class="net-val">Ethereum Sepolia (11155111)</span>
-        </div>
-        <div class="net-item">
-          <span class="net-label">Block:</span>
-          <span class="net-val" id="footerBlockNumber">Fetching...</span>
-        </div>
-        <div class="net-item">
-          <span class="net-label">Gas:</span>
-          <span class="net-val" id="footerGasPrice" style="color:var(--accent-orange);">~0.1 Gwei</span>
-        </div>
-        <div class="net-item">
-          <span class="net-label">Contract:</span>
-          <span class="net-val-code">
-            <span id="footerContractAddr">0x6525...90A0</span>
-            <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-          </span>
-          <span class="verified-badge" title="Source code verified on Sepolia Etherscan">VERIFIED</span>
-        </div>
-        <div class="net-item">
-          <span class="net-label">Status:</span>
-          <span class="net-val" id="footerReachableStatus" style="color:#00D26A;">Reachable</span>
-        </div>
-        <div class="net-item">
-          <a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
-            <span>Etherscan</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <line x1="10" y1="14" x2="21" y2="3"></line>
+      <div class="network-status-panel" id="footerNetworkPanel">
+        <div class="net-summary-row">
+          <div class="net-item net-item-status" id="footerStatusItem" title="Click to view Diagnostic Panel (Ctrl+Shift+D)">
+            <span class="status-dot pulse" id="footerStatusDot" style="color:var(--text-muted, #94A3B8);"></span>
+            <span class="net-label">Status:</span>
+            <span class="net-val" id="footerReachableStatus" style="color:var(--text-muted, #94A3B8);" title="Checking network and contract health...">Checking...</span>
+            <span id="footerSwitchNetworkWrap"></span>
+          </div>
+
+          <div class="net-item net-item-block">
+            <span class="net-label">Block:</span>
+            <span class="net-val" id="footerBlockNumber">Fetching...</span>
+          </div>
+
+          <button type="button" class="btn-footer-details-toggle" id="footerDetailsToggleBtn" aria-expanded="false" aria-controls="footerCollapsibleDetails" aria-label="Toggle network telemetry details">
+            <span>Details</span>
+            <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
-          </a>
+          </button>
+        </div>
+
+        <div class="net-details-group" id="footerCollapsibleDetails">
+          <div class="net-item net-item-network">
+            <span class="net-label">Network:</span>
+            <span class="net-val">Ethereum Sepolia (11155111)</span>
+          </div>
+
+          <div class="net-item net-item-gas">
+            <span class="net-label">Gas:</span>
+            <span class="net-val" id="footerGasPrice" style="color:var(--text-muted, #94A3B8);">~0.10 Gwei</span>
+          </div>
+
+          <div class="net-item net-item-contract">
+            <span class="net-label">Contract:</span>
+            <span class="net-val-code">
+              <span id="footerContractAddr">0x6525...90A0</span>
+              <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </span>
+            <a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer" class="verified-badge-link" title="Source code published on Etherscan">
+              <span class="verified-badge">VERIFIED</span>
+            </a>
+          </div>
+
+          <div class="net-item net-item-etherscan">
+            <a href="https://sepolia.etherscan.io/address/0x65259cB1AA56eE2145DdB5B7629Aec4C053690A0#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
+              <span>Etherscan</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </a>
+          </div>
+
+          <div class="net-item net-item-help">
+            <button type="button" class="btn-status-help" id="footerStatusHelpBtn" aria-expanded="false" aria-controls="footerStatusHelpPopover" title="Learn what these status values mean">
+              What is this?
+            </button>
+          </div>
+        </div>
+
+        <div class="status-help-popover" id="footerStatusHelpPopover" role="region" aria-label="Network status explanation" hidden>
+          <div class="status-help-header">
+            <span class="status-help-title">Telemetry Guide</span>
+            <button type="button" class="btn-status-help-close" id="footerStatusHelpCloseBtn" aria-label="Close guide">&times;</button>
+          </div>
+          <ul class="status-help-list">
+            <li><strong>Network:</strong> the test blockchain this app runs on.</li>
+            <li><strong>Block:</strong> the blockchain's latest page number; it keeps rising, which shows the site is reading live data.</li>
+            <li><strong>Gas:</strong> the small fee for sending a transaction; it is almost free on this test network.</li>
+            <li><strong>Contract:</strong> the address where the voting code lives on the blockchain; click Etherscan to check it yourself.</li>
+            <li><strong>Verified:</strong> the contract's source code is published publicly on Etherscan.</li>
+            <li><strong>Status:</strong> whether this website can currently read the contract.</li>
+          </ul>
         </div>
       </div>
 

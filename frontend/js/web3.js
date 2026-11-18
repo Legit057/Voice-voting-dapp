@@ -256,8 +256,11 @@ export async function getAccountBalance(address) {
 
 /**
  * Network Status Telemetry for Footer
+ * Supports cheap fast checks (block number and fee data) every 15s,
+ * and deep health checks (chainId, contract getCode, getPollCount) every 60s.
  */
-export async function getNetworkStatus() {
+export async function getNetworkStatus(options = {}) {
+  const isFull = Boolean(options.full);
   const result = {
     reachable: false,
     blockNumber: 0,
@@ -266,44 +269,41 @@ export async function getNetworkStatus() {
     isVerified: Boolean(VERIFIED),
     statusText: 'Degraded',
     failingCheck: null,
-    gasIsHigh: false
+    gasIsHigh: false,
+    isFullCheck: isFull
   };
 
   try {
     const provider = getReadProvider();
-    if (!provider) return result;
+    if (!provider) {
+      result.failingCheck = 'network unreachable';
+      return result;
+    }
 
-    const [blockNumber, feeData] = await Promise.all([
-      withReadRetry((p) => p.getBlockNumber()).catch(() => 0),
-      withReadRetry((p) => p.getFeeData()).catch(() => null)
-    ]);
-
-    result.blockNumber = blockNumber;
-
-    let getCodePass = false;
-    let getPollCountPass = false;
+    // 1. Cheap calls: block number and fee data (cheap & fast)
+    let blockNumber = 0;
+    let feeData = null;
 
     try {
-      const code = await withReadRetry((p) => p.getCode(CONTRACT_ADDRESS));
-      getCodePass = Boolean(code && code !== '0x');
-    } catch (e) {
-      result.failingCheck = 'Contract bytecode read failed';
+      blockNumber = await withReadRetry((p) => p.getBlockNumber());
+    } catch (err) {
+      result.failingCheck = 'network unreachable';
+      return result;
     }
 
     try {
-      const contract = getReadContract();
-      if (contract) {
-        await withReadRetry((p) => {
-          const c = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
-          return c.getPollCount();
-        });
-        getPollCountPass = true;
-      }
-    } catch (e) {
-      if (!result.failingCheck) result.failingCheck = 'getPollCount failed';
+      feeData = await withReadRetry((p) => p.getFeeData());
+    } catch {
+      // Fee data failure is non-fatal if block number succeeded
     }
 
-    // Format gas price
+    result.blockNumber = Number(blockNumber) || 0;
+    if (result.blockNumber === 0) {
+      result.failingCheck = 'network unreachable';
+      return result;
+    }
+
+    // Format gas price in neutral format (< 0.01 Gwei for tiny values)
     if (feeData && feeData.gasPrice && window.ethers) {
       const gweiVal = Number(window.ethers.formatUnits(feeData.gasPrice, 'gwei'));
       if (gweiVal < 0.01) {
@@ -314,26 +314,69 @@ export async function getNetworkStatus() {
       if (gweiVal > 100) {
         result.gasIsHigh = true;
       }
+    } else {
+      result.gasPriceGwei = '< 0.01';
     }
 
-    // Operational only when block, code, and getPollCount pass
-    if (blockNumber > 0 && getCodePass && getPollCountPass) {
+    // If cheap telemetry only, verify reachability based on valid block number
+    if (!isFull) {
       result.reachable = true;
       result.statusText = 'Operational';
       result.failingCheck = null;
-    } else {
-      result.reachable = false;
-      result.statusText = 'Degraded';
-      if (!result.failingCheck) {
-        result.failingCheck = !getCodePass ? 'Contract unreachable' : 'Block fetch failed';
-      }
+      return result;
     }
 
+    // 2. Full health check: chainId, getCode of the contract, getPollCount
+    // A. Verify chainId (must be Sepolia: 11155111)
+    try {
+      const net = await withReadRetry((p) => p.getNetwork());
+      const chainId = Number(net?.chainId);
+      if (chainId !== 11155111) {
+        result.failingCheck = 'network unreachable';
+        result.statusText = 'Degraded';
+        return result;
+      }
+    } catch {
+      result.failingCheck = 'network unreachable';
+      result.statusText = 'Degraded';
+      return result;
+    }
+
+    // B. Verify bytecode at CONTRACT_ADDRESS
+    try {
+      const code = await withReadRetry((p) => p.getCode(CONTRACT_ADDRESS));
+      if (!code || code === '0x' || code === '0x0') {
+        result.failingCheck = 'contract not found at this address';
+        result.statusText = 'Degraded';
+        return result;
+      }
+    } catch {
+      result.failingCheck = 'contract not found at this address';
+      result.statusText = 'Degraded';
+      return result;
+    }
+
+    // C. Verify contract read call: getPollCount()
+    try {
+      await withReadRetry((p) => {
+        const c = new window.ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, p);
+        return c.getPollCount();
+      });
+    } catch {
+      result.failingCheck = 'read call failed';
+      result.statusText = 'Degraded';
+      return result;
+    }
+
+    // All full health checks passed
+    result.reachable = true;
+    result.statusText = 'Operational';
+    result.failingCheck = null;
     return result;
   } catch (err) {
     result.reachable = false;
     result.statusText = 'Degraded';
-    result.failingCheck = err.message || 'Connection error';
+    result.failingCheck = result.failingCheck || 'network unreachable';
     return result;
   }
 }

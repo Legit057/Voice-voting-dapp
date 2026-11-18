@@ -27,24 +27,24 @@ export function injectLayout() {
   try { injectFooter(); } catch (err) { console.error('injectFooter failed:', err); }
   try { initTheme(); } catch (err) { console.error('initTheme failed:', err); }
   try { setupNavEventListeners(); } catch (err) { console.error('setupNavEventListeners failed:', err); }
-  try { updateNetworkStatusPanel(); } catch (err) { console.error('updateNetworkStatusPanel failed:', err); }
+  try { initNetworkStatusStrip(); } catch (err) { console.error('initNetworkStatusStrip failed:', err); }
   try { initPerRouteStickers(); } catch (err) { console.error('initPerRouteStickers failed:', err); }
   try { initPageTransitions(); } catch (err) { console.error('initPageTransitions failed:', err); }
 
   // Subscribe layout to wallet state changes
-  wallet.subscribe((walletState) => {
-    try {
-      updateWalletButtonState(walletState);
-      updateNetworkRibbonState(walletState);
-    } catch (err) {
-      console.error('wallet subscription update error in layout:', err);
-    }
-  });
-
-  // Periodic network telemetry update (every 15s)
-  setInterval(() => {
-    try { updateNetworkStatusPanel(); } catch (err) { console.error('updateNetworkStatusPanel interval error:', err); }
-  }, 15000);
+  try {
+    wallet.subscribe((walletState) => {
+      try {
+        updateWalletButtonState(walletState);
+        updateNetworkRibbonState(walletState);
+        updateNetworkStatusWithWallet(walletState);
+      } catch (err) {
+        console.error('wallet subscription update error in layout:', err);
+      }
+    });
+  } catch (err) {
+    console.error('wallet subscription failed in layout:', err);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -242,51 +242,91 @@ function injectFooter() {
     <footer class="footer-wrapper" role="contentinfo">
       <div class="container">
         <!-- Live Network Telemetry Status Panel -->
-        <div class="network-status-panel" id="footerNetworkPanel" style="cursor:pointer;" title="Click to open Diagnostic Panel (Ctrl+Shift+D)">
-          <div class="net-item">
-            <span class="status-dot" id="footerStatusDot" style="color:#00D26A;"></span>
-            <span class="net-label">Network:</span>
-            <span class="net-val">Ethereum Sepolia (11155111)</span>
-          </div>
+        <div class="network-status-panel" id="footerNetworkPanel">
+          <!-- Summary Row (Status, Block, Details Toggle on mobile) -->
+          <div class="net-summary-row">
+            <div class="net-item net-item-status" id="footerStatusItem" title="Click to view Diagnostic Panel (Ctrl+Shift+D)">
+              <span class="status-dot pulse" id="footerStatusDot" style="color:var(--text-muted, #94A3B8);"></span>
+              <span class="net-label">Status:</span>
+              <span class="net-val" id="footerReachableStatus" style="color:var(--text-muted, #94A3B8);" title="Checking network and contract health...">Checking...</span>
+              <span id="footerSwitchNetworkWrap"></span>
+            </div>
 
-          <div class="net-item">
-            <span class="net-label">Block:</span>
-            <span class="net-val" id="footerBlockNumber">Fetching...</span>
-          </div>
+            <div class="net-item net-item-block">
+              <span class="net-label">Block:</span>
+              <span class="net-val" id="footerBlockNumber">Fetching...</span>
+            </div>
 
-          <div class="net-item">
-            <span class="net-label">Gas:</span>
-            <span class="net-val" id="footerGasPrice" style="color:var(--text-muted, #94A3B8);">~0.1 Gwei</span>
-          </div>
-
-          <div class="net-item">
-            <span class="net-label">Contract:</span>
-            <span class="net-val-code">
-              <span id="footerContractAddr">${shortenAddress(CONTRACT_ADDRESS)}</span>
-              <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-            </span>
-            ${VERIFIED ? `<span class="verified-badge" title="Source code verified on Sepolia Etherscan">VERIFIED</span>` : ''}
-          </div>
-
-          <div class="net-item">
-            <span class="net-label">Status:</span>
-            <span class="net-val" id="footerReachableStatus" style="color:#00D26A;" title="Checking health...">Checking...</span>
-          </div>
-
-          <div class="net-item">
-            <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
-              Etherscan
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
+            <button type="button" class="btn-footer-details-toggle" id="footerDetailsToggleBtn" aria-expanded="false" aria-controls="footerCollapsibleDetails" aria-label="Toggle network telemetry details">
+              <span>Details</span>
+              <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
-            </a>
+            </button>
+          </div>
+
+          <!-- Collapsible / Expanded Details Group -->
+          <div class="net-details-group" id="footerCollapsibleDetails">
+            <div class="net-item net-item-network">
+              <span class="net-label">Network:</span>
+              <span class="net-val">Ethereum Sepolia (11155111)</span>
+            </div>
+
+            <div class="net-item net-item-gas">
+              <span class="net-label">Gas:</span>
+              <span class="net-val" id="footerGasPrice" style="color:var(--text-muted, #94A3B8);">~0.10 Gwei</span>
+            </div>
+
+            <div class="net-item net-item-contract">
+              <span class="net-label">Contract:</span>
+              <span class="net-val-code">
+                <span id="footerContractAddr">${shortenAddress(CONTRACT_ADDRESS)}</span>
+                <button type="button" class="btn-copy-address" id="footerCopyContractBtn" title="Copy Contract Address" aria-label="Copy Contract Address">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </span>
+              ${VERIFIED ? `
+                <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}#code" target="_blank" rel="noopener noreferrer" class="verified-badge-link" title="Source code published on Etherscan">
+                  <span class="verified-badge">VERIFIED</span>
+                </a>
+              ` : ''}
+            </div>
+
+            <div class="net-item net-item-etherscan">
+              <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}#code" target="_blank" rel="noopener noreferrer" class="toast-tx-link">
+                Etherscan
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>
+            </div>
+
+            <div class="net-item net-item-help">
+              <button type="button" class="btn-status-help" id="footerStatusHelpBtn" aria-expanded="false" aria-controls="footerStatusHelpPopover" title="Learn what these status values mean">
+                What is this?
+              </button>
+            </div>
+          </div>
+
+          <!-- What is this? Popover -->
+          <div class="status-help-popover" id="footerStatusHelpPopover" role="region" aria-label="Network status explanation" hidden>
+            <div class="status-help-header">
+              <span class="status-help-title">Telemetry Guide</span>
+              <button type="button" class="btn-status-help-close" id="footerStatusHelpCloseBtn" aria-label="Close guide">&times;</button>
+            </div>
+            <ul class="status-help-list">
+              <li><strong>Network:</strong> the test blockchain this app runs on.</li>
+              <li><strong>Block:</strong> the blockchain's latest page number; it keeps rising, which shows the site is reading live data.</li>
+              <li><strong>Gas:</strong> the small fee for sending a transaction; it is almost free on this test network.</li>
+              <li><strong>Contract:</strong> the address where the voting code lives on the blockchain; click Etherscan to check it yourself.</li>
+              <li><strong>Verified:</strong> the contract's source code is published publicly on Etherscan.</li>
+              <li><strong>Status:</strong> whether this website can currently read the contract.</li>
+            </ul>
           </div>
         </div>
 
@@ -339,16 +379,6 @@ function injectFooter() {
     existingFooter.outerHTML = footerHtml;
   } else {
     document.body.insertAdjacentHTML('beforeend', footerHtml);
-  }
-
-  // Bind footer contract copy button
-  const copyBtn = document.getElementById('footerCopyContractBtn');
-  if (copyBtn) {
-    copyBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      navigator.clipboard.writeText(CONTRACT_ADDRESS);
-      showToast('Contract address copied to clipboard!', 'success');
-    });
   }
 }
 
@@ -591,34 +621,306 @@ function updateNetworkRibbonState(walletState) {
   }
 }
 
-async function updateNetworkStatusPanel() {
+/* --------------------------------------------------------------------------
+   Network Telemetry Poller & Status Strip Manager
+   -------------------------------------------------------------------------- */
+let statusTimerId = null;
+let consecutiveFailures = 0;
+let lastFullCheckTime = 0;
+let isCurrentlyChecking = false;
+let isDegraded = false;
+let isStatusListenersBound = false;
+
+const lastKnownStatusState = {
+  blockNumber: null,
+  gasPriceGwei: null,
+  reachable: null,
+  statusText: 'Checking',
+  failingCheck: null
+};
+
+export function clearNetworkStatusTimers() {
+  if (statusTimerId) {
+    clearTimeout(statusTimerId);
+    statusTimerId = null;
+  }
+}
+
+function scheduleNextStatusCheck(delayMs) {
+  clearNetworkStatusTimers();
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  statusTimerId = setTimeout(() => {
+    runStatusCycle(false);
+  }, delayMs);
+}
+
+async function runStatusCycle(isImmediate = false) {
+  if (isCurrentlyChecking) return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+  isCurrentlyChecking = true;
+  const now = Date.now();
+  const needFullCheck = isImmediate || (now - lastFullCheckTime >= 60000) || lastFullCheckTime === 0;
+
+  try {
+    const res = await getNetworkStatus({ full: needFullCheck });
+    if (needFullCheck) {
+      lastFullCheckTime = now;
+    }
+
+    if (res.reachable) {
+      // 1 success returns to Operational
+      consecutiveFailures = 0;
+      isDegraded = false;
+      lastKnownStatusState.reachable = true;
+      lastKnownStatusState.statusText = 'Operational';
+      lastKnownStatusState.failingCheck = null;
+    } else {
+      consecutiveFailures++;
+      lastKnownStatusState.failingCheck = res.failingCheck || 'network unreachable';
+      if (consecutiveFailures >= 2) {
+        // switch to Degraded only after 2 consecutive failures
+        isDegraded = true;
+        lastKnownStatusState.reachable = false;
+        lastKnownStatusState.statusText = 'Degraded';
+      }
+      // If consecutiveFailures == 1, keep previous status to avoid flicker
+    }
+
+    if (res.blockNumber && res.blockNumber > 0) {
+      lastKnownStatusState.blockNumber = res.blockNumber;
+    }
+    if (res.gasPriceGwei) {
+      lastKnownStatusState.gasPriceGwei = res.gasPriceGwei;
+    }
+
+    renderNetworkStatusStrip(lastKnownStatusState);
+  } catch {
+    consecutiveFailures++;
+    lastKnownStatusState.failingCheck = 'network unreachable';
+    if (consecutiveFailures >= 2) {
+      isDegraded = true;
+      lastKnownStatusState.reachable = false;
+      lastKnownStatusState.statusText = 'Degraded';
+    }
+    renderNetworkStatusStrip(lastKnownStatusState);
+  } finally {
+    isCurrentlyChecking = false;
+    scheduleNextStatusCheck(isDegraded ? 30000 : 15000);
+  }
+}
+
+export function updateNetworkStatusWithWallet() {
+  renderNetworkStatusStrip(lastKnownStatusState);
+}
+
+function renderNetworkStatusStrip(state) {
   const blockEl = document.getElementById('footerBlockNumber');
   const statusEl = document.getElementById('footerReachableStatus');
   const dotEl = document.getElementById('footerStatusDot');
   const gasEl = document.getElementById('footerGasPrice');
+  const switchWrap = document.getElementById('footerSwitchNetworkWrap');
 
-  const status = await getNetworkStatus();
-
-  if (blockEl && status.blockNumber) {
-    blockEl.textContent = `#${status.blockNumber.toLocaleString()}`;
+  if (blockEl && state.blockNumber) {
+    blockEl.textContent = `#${Number(state.blockNumber).toLocaleString()}`;
   }
 
-  if (gasEl && status.gasPriceGwei) {
-    gasEl.textContent = `${status.gasPriceGwei} Gwei`;
-    gasEl.style.color = status.gasIsHigh ? 'var(--accent-red, #EF4444)' : 'var(--text-muted, #94A3B8)';
+  if (gasEl && state.gasPriceGwei) {
+    const gasStr = state.gasPriceGwei.includes('Gwei') ? state.gasPriceGwei : `${state.gasPriceGwei} Gwei`;
+    gasEl.textContent = gasStr;
+    gasEl.style.color = 'var(--text-muted, #94A3B8)';
   }
 
   if (statusEl && dotEl) {
-    if (status.reachable) {
+    if (wallet.state.status === 'wrong_network') {
+      statusEl.textContent = 'Wrong network';
+      statusEl.style.color = '#FFA500';
+      statusEl.title = 'Connected wallet is not on Ethereum Sepolia. Click to switch.';
+      dotEl.style.color = '#FFA500';
+      dotEl.classList.remove('pulse');
+
+      if (switchWrap) {
+        switchWrap.innerHTML = `
+          <button type="button" class="btn-switch-network-inline" id="footerSwitchNetworkBtn" title="Switch network in wallet">Switch to Sepolia</button>
+        `;
+        const switchBtn = document.getElementById('footerSwitchNetworkBtn');
+        if (switchBtn) {
+          switchBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              await wallet.switchToSepolia();
+              showToast('Switched to Ethereum Sepolia!', 'success');
+            } catch (err) {
+              showToast('Network switch failed: ' + (err.message || err), 'error');
+            }
+          });
+        }
+      }
+    } else if (state.statusText === 'Degraded') {
+      statusEl.textContent = 'Degraded';
+      statusEl.style.color = '#FFA500';
+      const failingMsg = state.failingCheck || 'network unreachable';
+      statusEl.title = `Degraded: ${failingMsg}`;
+      dotEl.style.color = '#FFA500';
+      dotEl.classList.remove('pulse');
+      if (switchWrap) switchWrap.innerHTML = '';
+    } else if (state.statusText === 'Operational') {
       statusEl.textContent = 'Operational';
       statusEl.style.color = '#00D26A';
-      statusEl.title = 'All systems operational (Block, Bytecode, getPollCount pass)';
+      statusEl.title = 'All systems operational (Sepolia chainId 11155111, contract bytecode verified, getPollCount pass)';
       dotEl.style.color = '#00D26A';
+      dotEl.classList.add('pulse');
+      if (switchWrap) switchWrap.innerHTML = '';
     } else {
-      statusEl.textContent = 'Degraded';
-      statusEl.style.color = '#FFA500'; // Amber
-      statusEl.title = status.failingCheck ? `Degraded: ${status.failingCheck}` : 'Degraded: Network check failed';
-      dotEl.style.color = '#FFA500';
+      statusEl.textContent = 'Checking...';
+      statusEl.style.color = 'var(--text-muted, #94A3B8)';
+      statusEl.title = 'Checking network and contract health...';
+      dotEl.style.color = 'var(--text-muted, #94A3B8)';
+      dotEl.classList.remove('pulse');
+      if (switchWrap) switchWrap.innerHTML = '';
     }
   }
+}
+
+function setupCopyContractBtn() {
+  const copyBtn = document.getElementById('footerCopyContractBtn');
+  if (!copyBtn) return;
+  const originalHtml = copyBtn.innerHTML;
+  let copyFeedbackTimer = null;
+
+  copyBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(CONTRACT_ADDRESS);
+    copyBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00D26A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <span class="copy-feedback-text">Copied</span>
+    `;
+    copyBtn.setAttribute('title', 'Copied!');
+    copyBtn.setAttribute('aria-label', 'Copied to clipboard');
+
+    if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = setTimeout(() => {
+      copyBtn.innerHTML = originalHtml;
+      copyBtn.setAttribute('title', 'Copy Contract Address');
+      copyBtn.setAttribute('aria-label', 'Copy Contract Address');
+    }, 1500);
+
+    showToast('Contract address copied to clipboard!', 'success');
+  });
+}
+
+function setupStatusHelpPopover() {
+  const helpBtn = document.getElementById('footerStatusHelpBtn');
+  const popover = document.getElementById('footerStatusHelpPopover');
+  const closeBtn = document.getElementById('footerStatusHelpCloseBtn');
+  if (!helpBtn || !popover) return;
+
+  function openPopover() {
+    popover.removeAttribute('hidden');
+    helpBtn.setAttribute('aria-expanded', 'true');
+    popover.classList.add('open');
+  }
+
+  function closePopover() {
+    popover.setAttribute('hidden', '');
+    helpBtn.setAttribute('aria-expanded', 'false');
+    popover.classList.remove('open');
+  }
+
+  helpBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isExpanded = helpBtn.getAttribute('aria-expanded') === 'true';
+    if (isExpanded) {
+      closePopover();
+    } else {
+      openPopover();
+    }
+  });
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePopover();
+      helpBtn.focus();
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && helpBtn.getAttribute('aria-expanded') === 'true') {
+      closePopover();
+      helpBtn.focus();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (helpBtn.getAttribute('aria-expanded') === 'true') {
+      if (!popover.contains(e.target) && e.target !== helpBtn) {
+        closePopover();
+      }
+    }
+  });
+}
+
+function setupMobileDetailsToggle() {
+  const toggleBtn = document.getElementById('footerDetailsToggleBtn');
+  const detailsGroup = document.getElementById('footerCollapsibleDetails');
+  if (!toggleBtn || !detailsGroup) return;
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    const nextState = !isExpanded;
+    toggleBtn.setAttribute('aria-expanded', String(nextState));
+    if (nextState) {
+      detailsGroup.classList.add('expanded');
+    } else {
+      detailsGroup.classList.remove('expanded');
+    }
+  });
+}
+
+function setupStatusDiagnosticsClick() {
+  const statusItem = document.getElementById('footerStatusItem');
+  if (!statusItem) return;
+
+  statusItem.style.cursor = 'pointer';
+  statusItem.addEventListener('click', (e) => {
+    if (e.target.closest('#footerSwitchNetworkBtn') || e.target.closest('button')) {
+      return;
+    }
+    showDebugOverlay();
+  });
+}
+
+export function initNetworkStatusStrip() {
+  clearNetworkStatusTimers();
+  renderNetworkStatusStrip(lastKnownStatusState);
+
+  // Bind UI interactions
+  setupCopyContractBtn();
+  setupStatusHelpPopover();
+  setupMobileDetailsToggle();
+  setupStatusDiagnosticsClick();
+
+  // Bind visibility and pagehide listeners once
+  if (!isStatusListenersBound && typeof document !== 'undefined') {
+    isStatusListenersBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        clearNetworkStatusTimers();
+        runStatusCycle(true);
+      } else {
+        clearNetworkStatusTimers();
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      clearNetworkStatusTimers();
+    });
+  }
+
+  // Trigger initial full check
+  runStatusCycle(true);
 }

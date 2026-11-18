@@ -318,10 +318,19 @@ if (typeof window !== 'undefined') {
       target &&
       (target.id === 'footerReachableStatus' ||
        target.id === 'footerStatusDot' ||
-       target.closest('.network-status-panel'))
+       target.closest('#footerStatusItem'))
     ) {
-      // Don't intercept copy button or etherscan link clicks inside panel
-      if (target.closest('.btn-copy-address') || target.closest('.toast-tx-link') || target.closest('a')) {
+      // Don't intercept copy button, links, help button, popover, or mobile toggles
+      if (
+        target.closest('.btn-copy-address') ||
+        target.closest('.toast-tx-link') ||
+        target.closest('.verified-badge-link') ||
+        target.closest('a') ||
+        target.closest('.btn-status-help') ||
+        target.closest('.status-help-popover') ||
+        target.closest('.btn-footer-details-toggle') ||
+        target.closest('.btn-switch-network-inline')
+      ) {
         return;
       }
       showDebugOverlay();
